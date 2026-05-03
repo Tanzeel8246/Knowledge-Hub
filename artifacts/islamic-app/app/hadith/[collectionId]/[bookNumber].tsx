@@ -115,7 +115,7 @@ function makeStyles(colors: any) {
     cardActions: { flexDirection: "row", alignItems: "center", gap: 10 },
     gradeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
     gradeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-    arabic: { fontSize: 18, lineHeight: 34, textAlign: "right", marginBottom: 12, color: "#FFFFFF" },
+    arabic: { fontSize: 18, lineHeight: 34, textAlign: "right", marginBottom: 12 },
     english: { fontSize: 14, lineHeight: 22, fontFamily: "Inter_400Regular", marginBottom: 10 },
     narrator: { fontSize: 12, fontFamily: "Inter_500Medium", fontStyle: "italic", marginBottom: 4 },
     reference: { fontSize: 11, fontFamily: "Inter_400Regular" },

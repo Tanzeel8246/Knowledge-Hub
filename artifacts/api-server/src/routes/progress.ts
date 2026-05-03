@@ -67,7 +67,7 @@ router.get("/progress/reading-streak", requireAuth, async (req, res) => {
 
 router.post("/progress/log", requireAuth, async (req, res) => {
   const user = (req as any).user;
-  const parsed = LogActivityBody.safeParse(req.body);
+  const parsed = LogReadingActivityBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Invalid request body" });
     return;

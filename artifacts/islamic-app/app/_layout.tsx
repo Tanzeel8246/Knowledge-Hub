@@ -42,6 +42,7 @@ function RootLayoutNav() {
       <Stack.Screen name="quran/[surahNumber]" options={{ headerShown: false }} />
       <Stack.Screen name="hadith/[collectionId]" options={{ headerShown: false }} />
       <Stack.Screen name="hadith/[collectionId]/[bookNumber]" options={{ headerShown: false }} />
+      <Stack.Screen name="books" options={{ headerShown: false }} />
       <Stack.Screen name="book/[bookId]" options={{ headerShown: false }} />
       <Stack.Screen name="book/[bookId]/[chapterId]" options={{ headerShown: false }} />
       <Stack.Screen name="learning/[pathId]" options={{ headerShown: false }} />
