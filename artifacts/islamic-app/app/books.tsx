@@ -20,12 +20,11 @@ export default function BooksScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [language, setLanguage] = useState<"" | "en" | "ar" | "ur">("");
 
   const { data: booksData, isLoading } = useGetBooks({
-    search: search || undefined,
-    categoryId: selectedCategory ?? undefined,
+    category: selectedCategory ?? undefined,
     language: language || undefined,
     limit: 50,
   });

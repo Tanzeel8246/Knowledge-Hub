@@ -39,7 +39,7 @@ export default function RegisterScreen() {
       return;
     }
     try {
-      const data = await registerMutation.mutateAsync({ name: name.trim(), email: email.trim(), password });
+      const data = await registerMutation.mutateAsync({ data: { name: name.trim(), email: email.trim(), password } });
       await login(data.user as any, data.token);
       router.replace("/(tabs)");
     } catch (err: any) {

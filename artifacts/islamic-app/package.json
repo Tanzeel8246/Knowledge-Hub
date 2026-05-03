@@ -56,7 +56,10 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "adhan": "^4.4.3",
     "expo-av": "^16.0.8",
-    "expo-file-system": "^55.0.17"
+    "expo-clipboard": "^55.0.13",
+    "expo-file-system": "^55.0.17",
+    "expo-sensors": "^55.0.13"
   }
 }

@@ -38,7 +38,7 @@ export default function WorkspaceScreen() {
 
   const handleCreateNote = async () => {
     if (!noteTitle.trim()) return;
-    await createNote.mutateAsync({ title: noteTitle, content: noteContent });
+    await createNote.mutateAsync({ data: { title: noteTitle, content: noteContent } });
     setNoteTitle("");
     setNoteContent("");
     setShowNewNote(false);
@@ -204,12 +204,11 @@ export default function WorkspaceScreen() {
           </View>
           <View style={s.modalBody}>
             <TextInput
-              style={[s.modalInput, { color: colors.foreground, borderBottomColor: colors.border }]}
+              style={[s.modalInput, { color: colors.foreground, borderBottomColor: colors.border, fontSize: 20 }]}
               placeholder="Title"
               placeholderTextColor={colors.mutedForeground}
               value={noteTitle}
               onChangeText={setNoteTitle}
-              fontSize={20}
             />
             <TextInput
               style={[s.modalContent, { color: colors.foreground }]}

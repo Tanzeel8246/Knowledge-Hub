@@ -49,6 +49,20 @@ function RootLayoutNav() {
       <Stack.Screen name="learning/[pathId]/[lessonId]" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
       <Stack.Screen name="qaris" options={{ headerShown: false }} />
+      <Stack.Screen name="tasbih" options={{ headerShown: false }} />
+      <Stack.Screen name="prayer-times" options={{ headerShown: false }} />
+      <Stack.Screen name="qibla" options={{ headerShown: false }} />
+      <Stack.Screen name="duas" options={{ headerShown: false }} />
+      <Stack.Screen name="names-of-allah" options={{ headerShown: false }} />
+      <Stack.Screen name="quran-search" options={{ headerShown: false }} />
+      <Stack.Screen name="islamic-calendar" options={{ headerShown: false }} />
+      <Stack.Screen name="zakat-calculator" options={{ headerShown: false }} />
+      <Stack.Screen name="prayer-tracker" options={{ headerShown: false }} />
+      <Stack.Screen name="islamic-quiz" options={{ headerShown: false }} />
+      <Stack.Screen name="adhkar" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
+      <Stack.Screen name="hifz-tracker" options={{ headerShown: false }} />
+      <Stack.Screen name="ramadan-tracker" options={{ headerShown: false }} />
     </Stack>
   );
 }

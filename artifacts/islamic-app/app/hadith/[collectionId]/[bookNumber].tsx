@@ -28,11 +28,11 @@ export default function HadithListScreen() {
 
   const handleBookmark = async (hadith: any) => {
     try {
-      await createBookmark.mutateAsync({
-        sourceType: "hadith",
+      await createBookmark.mutateAsync({ data: {
+        sourceType: "hadith" as any,
         sourceId: hadith.id,
         label: `${collectionId} ${hadith.hadithNumber}`,
-      });
+      } });
       queryClient.invalidateQueries({ queryKey: ["/bookmarks"] });
       Alert.alert("Bookmarked", "Hadith saved to your workspace");
     } catch {

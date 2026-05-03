@@ -30,6 +30,7 @@ export default function SurahReaderScreen() {
   const queryClient = useQueryClient();
 
   const [showTranslation, setShowTranslation] = useState(true);
+  const [showTafsir, setShowTafsir] = useState(false);
   const [selectedReciter, setSelectedReciter] = useState<Reciter>(DEFAULT_RECITER);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingAyahIndex, setPlayingAyahIndex] = useState<number | null>(null);
@@ -193,6 +194,9 @@ export default function SurahReaderScreen() {
           <TouchableOpacity onPress={() => setShowQariModal(true)} style={[s.qariBtn, { backgroundColor: colors.primary + "15", borderColor: colors.primary }]}>
             <Feather name="mic" size={14} color={colors.primary} />
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowTafsir(t => !t)} style={[s.qariBtn, { backgroundColor: showTafsir ? colors.gold + "25" : "transparent", borderColor: showTafsir ? colors.gold : colors.border, borderWidth: 1.5 }]}>
+            <Feather name="book" size={14} color={showTafsir ? colors.gold : colors.foreground} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowTranslation(!showTranslation)}>
             <Feather name={showTranslation ? "eye" : "eye-off"} size={20} color={colors.foreground} />
           </TouchableOpacity>
@@ -263,6 +267,12 @@ export default function SurahReaderScreen() {
               )}
               {showTranslation && item.translationUr && (
                 <Text style={[s.urdu, { color: colors.mutedForeground }]}>{item.translationUr}</Text>
+              )}
+              {showTafsir && (item as any).tafsirEn && (
+                <View style={[s.tafsirBox, { backgroundColor: colors.gold + "10", borderColor: colors.gold + "30" }]}>
+                  <Text style={[s.tafsirLabel, { color: colors.gold }]}>📖 Tafsir</Text>
+                  <Text style={[s.tafsirText, { color: colors.foreground }]}>{(item as any).tafsirEn}</Text>
+                </View>
               )}
             </TouchableOpacity>
           );
@@ -384,5 +394,8 @@ function makeStyles(colors: any) {
     reciterName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
     reciterArabic: { fontSize: 13, marginBottom: 2 },
     reciterMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
+    tafsirBox: { borderRadius: 10, borderWidth: 1, padding: 12, marginTop: 8 },
+    tafsirLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginBottom: 6 },
+    tafsirText: { fontSize: 13, lineHeight: 20, fontFamily: "Inter_400Regular" },
   });
 }

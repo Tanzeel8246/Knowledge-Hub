@@ -33,7 +33,7 @@ export default function LoginScreen() {
       return;
     }
     try {
-      const data = await loginMutation.mutateAsync({ email: email.trim(), password });
+      const data = await loginMutation.mutateAsync({ data: { email: email.trim(), password } });
       await login(data.user as any, data.token);
       router.replace("/(tabs)");
     } catch (err: any) {
