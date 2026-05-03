@@ -120,6 +120,14 @@ export default function HomeScreen() {
     { icon: "weather-sunny", label: "Adhkar", route: "/adhkar", color: "#F59E0B" },
     { icon: "book-open-variant", label: "Hifz Tracker", route: "/hifz-tracker", color: "#7C3AED" },
     { icon: "moon-waning-crescent", label: "Ramadan", route: "/ramadan-tracker", color: "#1E3A5F" },
+    { icon: "hands-pray", label: "Salah Guide", route: "/salah-guide", color: "#059669" },
+    { icon: "timeline-text-outline", label: "History", route: "/islamic-history", color: "#78716C" },
+    { icon: "alphabetical", label: "Arabic", route: "/arabic-alphabet", color: "#0891B2" },
+    { icon: "account-group", label: "Prophets", route: "/prophets", color: "#059669" },
+    { icon: "water", label: "Wudu", route: "/wudu-guide", color: "#0891B2" },
+    { icon: "music-note", label: "Tajweed", route: "/tajweed", color: "#7C3AED" },
+    { icon: "book-open-page-variant", label: "Seerah", route: "/seerah", color: "#D97706" },
+    { icon: "account-heart", label: "Names", route: "/islamic-names", color: "#DC2626" },
   ];
 
   return (

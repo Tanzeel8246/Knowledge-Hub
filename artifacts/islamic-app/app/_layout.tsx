@@ -63,6 +63,14 @@ function RootLayoutNav() {
       <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="hifz-tracker" options={{ headerShown: false }} />
       <Stack.Screen name="ramadan-tracker" options={{ headerShown: false }} />
+      <Stack.Screen name="salah-guide" options={{ headerShown: false }} />
+      <Stack.Screen name="islamic-history" options={{ headerShown: false }} />
+      <Stack.Screen name="arabic-alphabet" options={{ headerShown: false }} />
+      <Stack.Screen name="prophets" options={{ headerShown: false }} />
+      <Stack.Screen name="wudu-guide" options={{ headerShown: false }} />
+      <Stack.Screen name="tajweed" options={{ headerShown: false }} />
+      <Stack.Screen name="seerah" options={{ headerShown: false }} />
+      <Stack.Screen name="islamic-names" options={{ headerShown: false }} />
     </Stack>
   );
 }

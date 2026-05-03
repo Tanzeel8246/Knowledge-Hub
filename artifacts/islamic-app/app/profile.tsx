@@ -70,6 +70,14 @@ export default function ProfileScreen() {
       { icon: "weather-sunny", label: "Adhkar (Morning/Evening)", route: "/adhkar", color: "#F59E0B", isMCIcon: true },
       { icon: "book-open-variant", label: "Hifz Tracker", route: "/hifz-tracker", color: "#7C3AED", isMCIcon: true },
       { icon: "moon-waning-crescent", label: "Ramadan Tracker", route: "/ramadan-tracker", color: "#1E3A5F", isMCIcon: true },
+      { icon: "hands-pray", label: "Salah Guide", route: "/salah-guide", color: "#059669", isMCIcon: true },
+      { icon: "timeline-text-outline", label: "Islamic History", route: "/islamic-history", color: "#78716C", isMCIcon: true },
+      { icon: "alphabetical", label: "Arabic Alphabet", route: "/arabic-alphabet", color: "#0891B2", isMCIcon: true },
+      { icon: "account-group", label: "Prophets of Islam", route: "/prophets", color: "#059669", isMCIcon: true },
+      { icon: "water", label: "Wudu Guide", route: "/wudu-guide", color: "#0891B2", isMCIcon: true },
+      { icon: "music-note", label: "Tajweed Rules", route: "/tajweed", color: "#7C3AED", isMCIcon: true },
+      { icon: "book-open-page-variant", label: "Seerah", route: "/seerah", color: "#D97706", isMCIcon: true },
+      { icon: "account-heart", label: "Islamic Names", route: "/islamic-names", color: "#DC2626", isMCIcon: true },
     ],
   };
 

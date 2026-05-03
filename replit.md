@@ -63,13 +63,21 @@ Expo React Native app with the following screens:
 - Settings (`app/settings.tsx`) — Prayer calculation method (10 methods), Asr juristic method, Quran display options, notification settings, font size, language, theme mode, about section
 - Hifz Tracker (`app/hifz-tracker.tsx`) — All 114 surahs with memorization status (not started/in progress/memorized/revision), ayah-level progress, group by Juz, search/filter, overall progress bar (6,236 ayahs), persistent via AsyncStorage
 - Ramadan Tracker (`app/ramadan-tracker.tsx`) — Hijri-based countdown to Ramadan, 30-day fasting log (fasted/missed/partial/exempt), Suhoor/Iftar tracking, daily Quran pages, personal notes, 4 goal checkboxes, stats grid
+- Salah Guide (`app/salah-guide.tsx`) — Step-by-step prayer guide for all 5 prayers (Fajr/Dhuhr/Asr/Maghrib/Isha), 6 posture steps each with dua + transliteration, rakah counter, guided mode with progress bar
+- Islamic History (`app/islamic-history.tsx`) — 28 events across 7 eras (Pre-Islamic → Modern), searchable timeline, category filter (battle/revelation/political/scholarship etc.), detailed event view with significance
+- Arabic Alphabet (`app/arabic-alphabet.tsx`) — All 28 Arabic letters with 4 forms each, harakat vowels tab, group-based learning, progress tracker (mark learned), sound descriptions and learning tips
+- Prophets of Islam (`app/prophets.tsx`) — All 25 Quranic prophets with full story, key lesson, miracles, Quranic duas, family relations, Quran mention count
+- Wudu Guide (`app/wudu-guide.tsx`) — 11-step interactive Wudu guide with checkbox tracker + guided step-by-step mode, Fara'id/Sunnan/Breakers/Ghusl tabs
+- Tajweed Rules (`app/tajweed.tsx`) — 14 Tajweed rules covering Noon & Tanwin, Meem Sakinah, Madd elongation, Qalqalah, Waqf; category filter, detailed rule view with examples
+- Seerah (`app/seerah.tsx`) — Prophet Muhammad's ﷺ biography in 5 phases (Before Prophethood → Later Medinan), 30+ events with descriptions and extracted lessons
+- Islamic Names (`app/islamic-names.tsx`) — 75 Islamic names (male/female/both) with Arabic, meaning, origin, Quranic references, category filter (Prophetic/Quranic/Classical/Nature/Virtue), gender filter, search
 
 **Home Screen Features:**
 - Hijri date banner (clickable → Islamic Calendar)
 - Daily Verse widget (rotates daily, 14 curated Quran ayahs)
 - Hadith of the Day widget (rotates daily, 14 curated hadiths)
 - Stats row (streak, minutes, lessons)
-- 19 quick-action tiles (Read Quran, Hadith, Books, Learn, Prayer Times, Tasbih, Qibla, Duas, 99 Names, Search Quran, Calendar, Workspace, Zakat, Prayer Log, Islamic Quiz, Adhkar, Hifz Tracker, Ramadan)
+- 27 quick-action tiles (Read Quran, Hadith, Books, Learn, Prayer Times, Tasbih, Qibla, Duas, 99 Names, Search Quran, Calendar, Workspace, Zakat, Prayer Log, Islamic Quiz, Adhkar, Hifz Tracker, Ramadan, Salah Guide, History, Arabic Alphabet, Prophets, Wudu, Tajweed, Seerah, Names)
 - Daily Tools row (Prayer Times, Tasbih, Qibla)
 - Recent Activity list
 
