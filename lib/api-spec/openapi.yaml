@@ -3,20 +3,42 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Islamic Research & Learning OS API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: quran
+    description: Quran reader and search
+  - name: hadith
+    description: Hadith search and filtering
+  - name: books
+    description: Islamic books library
+  - name: learning
+    description: Learning paths and lessons
+  - name: notes
+    description: User notes
+  - name: bookmarks
+    description: User bookmarks
+  - name: folders
+    description: User folders/collections
+  - name: progress
+    description: User progress tracking
+  - name: admin
+    description: Admin content management
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +46,1112 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Users ─────────────────────────────────────────────────────────────────
+  /users/profile:
+    patch:
+      operationId: updateProfile
+      tags: [users]
+      summary: Update user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/stats:
+    get:
+      operationId: getUserStats
+      tags: [users]
+      summary: Get user study statistics
+      responses:
+        "200":
+          description: User stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserStats"
+
+  # ── Quran ─────────────────────────────────────────────────────────────────
+  /quran/surahs:
+    get:
+      operationId: getSurahs
+      tags: [quran]
+      summary: Get list of all surahs
+      responses:
+        "200":
+          description: List of surahs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Surah"
+
+  /quran/surahs/{surahNumber}:
+    get:
+      operationId: getSurah
+      tags: [quran]
+      summary: Get surah with ayahs
+      parameters:
+        - name: surahNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Surah detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SurahDetail"
+
+  /quran/ayahs/{surahNumber}/{ayahNumber}:
+    get:
+      operationId: getAyah
+      tags: [quran]
+      summary: Get single ayah with tafsir
+      parameters:
+        - name: surahNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: ayahNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ayah with tafsir
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AyahDetail"
+
+  /quran/search:
+    get:
+      operationId: searchQuran
+      tags: [quran]
+      summary: Search Quran text
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: lang
+          in: query
+          schema:
+            type: string
+            enum: [ar, en, ur]
+            default: en
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuranSearchResults"
+
+  /quran/juz/{juzNumber}:
+    get:
+      operationId: getJuz
+      tags: [quran]
+      summary: Get ayahs by juz
+      parameters:
+        - name: juzNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Juz ayahs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ayah"
+
+  # ── Hadith ────────────────────────────────────────────────────────────────
+  /hadith/collections:
+    get:
+      operationId: getHadithCollections
+      tags: [hadith]
+      summary: Get all hadith collections
+      responses:
+        "200":
+          description: Collections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HadithCollection"
+
+  /hadith/collections/{collectionId}/books:
+    get:
+      operationId: getHadithBooks
+      tags: [hadith]
+      summary: Get books in a hadith collection
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Books
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HadithBook"
+
+  /hadith/collections/{collectionId}/books/{bookNumber}/hadiths:
+    get:
+      operationId: getHadiths
+      tags: [hadith]
+      summary: Get hadiths in a book
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: bookNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Hadiths
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HadithList"
+
+  /hadith/{id}:
+    get:
+      operationId: getHadith
+      tags: [hadith]
+      summary: Get single hadith
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Hadith
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hadith"
+
+  /hadith/search:
+    get:
+      operationId: searchHadith
+      tags: [hadith]
+      summary: Search hadith
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: collectionId
+          in: query
+          schema:
+            type: string
+        - name: grade
+          in: query
+          schema:
+            type: string
+            enum: [sahih, hasan, daif, all]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HadithSearchResults"
+
+  # ── Books ─────────────────────────────────────────────────────────────────
+  /books:
+    get:
+      operationId: getBooks
+      tags: [books]
+      summary: Get books library
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Books
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookList"
+
+  /books/categories:
+    get:
+      operationId: getBookCategories
+      tags: [books]
+      summary: Get book categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookCategory"
+
+  /books/{bookId}:
+    get:
+      operationId: getBook
+      tags: [books]
+      summary: Get book detail
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookDetail"
+
+  /books/{bookId}/chapters:
+    get:
+      operationId: getBookChapters
+      tags: [books]
+      summary: Get chapters of a book
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chapters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookChapter"
+
+  /books/{bookId}/chapters/{chapterId}:
+    get:
+      operationId: getBookChapter
+      tags: [books]
+      summary: Get chapter content
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: chapterId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chapter content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookChapterDetail"
+
+  /books/search:
+    get:
+      operationId: searchBooks
+      tags: [books]
+      summary: Search books
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSearchResults"
+
+  # ── Learning Paths ────────────────────────────────────────────────────────
+  /learning/paths:
+    get:
+      operationId: getLearningPaths
+      tags: [learning]
+      summary: Get all learning paths
+      parameters:
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [beginner, intermediate, advanced]
+        - name: topic
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Learning paths
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LearningPath"
+
+  /learning/paths/{pathId}:
+    get:
+      operationId: getLearningPath
+      tags: [learning]
+      summary: Get learning path detail with lessons
+      parameters:
+        - name: pathId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Learning path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningPathDetail"
+
+  /learning/paths/{pathId}/enroll:
+    post:
+      operationId: enrollInPath
+      tags: [learning]
+      summary: Enroll in a learning path
+      parameters:
+        - name: pathId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Enrolled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+
+  /learning/paths/{pathId}/lessons/{lessonId}:
+    get:
+      operationId: getLesson
+      tags: [learning]
+      summary: Get lesson content
+      parameters:
+        - name: pathId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lessonId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lesson
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+
+  /learning/paths/{pathId}/lessons/{lessonId}/complete:
+    post:
+      operationId: completeLesson
+      tags: [learning]
+      summary: Mark lesson as complete
+      parameters:
+        - name: pathId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lessonId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Marked complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonProgress"
+
+  /learning/my-paths:
+    get:
+      operationId: getMyEnrollments
+      tags: [learning]
+      summary: Get user's enrolled paths with progress
+      responses:
+        "200":
+          description: Enrollments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnrollmentWithProgress"
+
+  # ── Notes ─────────────────────────────────────────────────────────────────
+  /notes:
+    get:
+      operationId: getNotes
+      tags: [notes]
+      summary: Get user notes
+      parameters:
+        - name: folderId
+          in: query
+          schema:
+            type: string
+        - name: sourceType
+          in: query
+          schema:
+            type: string
+            enum: [quran, hadith, book, general]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoteList"
+    post:
+      operationId: createNote
+      tags: [notes]
+      summary: Create a note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  /notes/{noteId}:
+    get:
+      operationId: getNote
+      tags: [notes]
+      summary: Get note
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+    patch:
+      operationId: updateNote
+      tags: [notes]
+      summary: Update note
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNoteRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+    delete:
+      operationId: deleteNote
+      tags: [notes]
+      summary: Delete note
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Bookmarks ─────────────────────────────────────────────────────────────
+  /bookmarks:
+    get:
+      operationId: getBookmarks
+      tags: [bookmarks]
+      summary: Get user bookmarks
+      parameters:
+        - name: sourceType
+          in: query
+          schema:
+            type: string
+            enum: [quran, hadith, book]
+        - name: folderId
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Bookmarks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookmarkList"
+    post:
+      operationId: createBookmark
+      tags: [bookmarks]
+      summary: Create a bookmark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookmarkRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bookmark"
+
+  /bookmarks/{bookmarkId}:
+    delete:
+      operationId: deleteBookmark
+      tags: [bookmarks]
+      summary: Delete bookmark
+      parameters:
+        - name: bookmarkId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Folders ───────────────────────────────────────────────────────────────
+  /folders:
+    get:
+      operationId: getFolders
+      tags: [folders]
+      summary: Get user folders
+      responses:
+        "200":
+          description: Folders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Folder"
+    post:
+      operationId: createFolder
+      tags: [folders]
+      summary: Create folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFolderRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+
+  /folders/{folderId}:
+    get:
+      operationId: getFolder
+      tags: [folders]
+      summary: Get folder with contents
+      parameters:
+        - name: folderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Folder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FolderDetail"
+    patch:
+      operationId: updateFolder
+      tags: [folders]
+      summary: Update folder
+      parameters:
+        - name: folderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFolderRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+    delete:
+      operationId: deleteFolder
+      tags: [folders]
+      summary: Delete folder
+      parameters:
+        - name: folderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Progress ──────────────────────────────────────────────────────────────
+  /progress/dashboard:
+    get:
+      operationId: getProgressDashboard
+      tags: [progress]
+      summary: Get user progress dashboard
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressDashboard"
+
+  /progress/reading-streak:
+    get:
+      operationId: getReadingStreak
+      tags: [progress]
+      summary: Get user reading streak
+      responses:
+        "200":
+          description: Streak info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadingStreak"
+
+  /progress/log:
+    post:
+      operationId: logReadingActivity
+      tags: [progress]
+      summary: Log a reading activity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogActivityRequest"
+      responses:
+        "200":
+          description: Logged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Admin ─────────────────────────────────────────────────────────────────
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get platform statistics
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: List all users
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserList"
+
+  /admin/books:
+    post:
+      operationId: adminCreateBook
+      tags: [admin]
+      summary: Create a book (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateBookRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookDetail"
+
+  /admin/books/{bookId}:
+    patch:
+      operationId: adminUpdateBook
+      tags: [admin]
+      summary: Update a book (admin)
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateBookRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookDetail"
+    delete:
+      operationId: adminDeleteBook
+      tags: [admin]
+      summary: Delete a book (admin)
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /admin/learning-paths:
+    post:
+      operationId: adminCreateLearningPath
+      tags: [admin]
+      summary: Create a learning path (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateLearningPathRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningPathDetail"
+
+  /admin/learning-paths/{pathId}:
+    patch:
+      operationId: adminUpdateLearningPath
+      tags: [admin]
+      summary: Update a learning path (admin)
+      parameters:
+        - name: pathId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateLearningPathRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningPathDetail"
+
+  /admin/content/seed:
+    post:
+      operationId: seedContent
+      tags: [admin]
+      summary: Seed initial Islamic content (admin)
+      responses:
+        "200":
+          description: Seeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +1159,926 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+      required: [message]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    # ── Auth schemas ──────────────────────────────────────────────────────────
+    RegisterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        language:
+          type: string
+          enum: [en, ar, ur]
+          default: en
+      required: [name, email, password]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+      required: [user, token]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        language:
+          type: string
+          enum: [en, ar, ur]
+        theme:
+          type: string
+          enum: [light, dark]
+        avatarUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, email, role, language, theme, createdAt]
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        language:
+          type: string
+          enum: [en, ar, ur]
+        theme:
+          type: string
+          enum: [light, dark]
+
+    UserStats:
+      type: object
+      properties:
+        totalNotes:
+          type: integer
+        totalBookmarks:
+          type: integer
+        totalFolders:
+          type: integer
+        enrolledPaths:
+          type: integer
+        completedLessons:
+          type: integer
+        readingStreak:
+          type: integer
+        totalReadingMinutes:
+          type: integer
+      required: [totalNotes, totalBookmarks, totalFolders, enrolledPaths, completedLessons, readingStreak, totalReadingMinutes]
+
+    # ── Quran schemas ─────────────────────────────────────────────────────────
+    Surah:
+      type: object
+      properties:
+        number:
+          type: integer
+        nameArabic:
+          type: string
+        nameTransliteration:
+          type: string
+        nameEnglish:
+          type: string
+        totalAyahs:
+          type: integer
+        revelationType:
+          type: string
+          enum: [Meccan, Medinan]
+        juzStart:
+          type: integer
+      required: [number, nameArabic, nameTransliteration, nameEnglish, totalAyahs, revelationType, juzStart]
+
+    Ayah:
+      type: object
+      properties:
+        number:
+          type: integer
+        surahNumber:
+          type: integer
+        numberInSurah:
+          type: integer
+        arabic:
+          type: string
+        translationEn:
+          type: string
+        translationUr:
+          type: string
+        juzNumber:
+          type: integer
+        pageNumber:
+          type: integer
+      required: [number, surahNumber, numberInSurah, arabic, translationEn, juzNumber]
+
+    AyahDetail:
+      allOf:
+        - $ref: "#/components/schemas/Ayah"
+        - type: object
+          properties:
+            tafsirEn:
+              type: string
+              nullable: true
+            tafsirUr:
+              type: string
+              nullable: true
+            tafsirAr:
+              type: string
+              nullable: true
+
+    SurahDetail:
+      allOf:
+        - $ref: "#/components/schemas/Surah"
+        - type: object
+          properties:
+            ayahs:
+              type: array
+              items:
+                $ref: "#/components/schemas/Ayah"
+          required: [ayahs]
+
+    QuranSearchResults:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ayah"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [results, total, page, totalPages]
+
+    # ── Hadith schemas ────────────────────────────────────────────────────────
+    HadithCollection:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        nameArabic:
+          type: string
+        author:
+          type: string
+        totalHadiths:
+          type: integer
+        description:
+          type: string
+          nullable: true
+      required: [id, name, nameArabic, author, totalHadiths]
+
+    HadithBook:
+      type: object
+      properties:
+        id:
+          type: string
+        collectionId:
+          type: string
+        bookNumber:
+          type: integer
+        nameArabic:
+          type: string
+        nameEnglish:
+          type: string
+        totalHadiths:
+          type: integer
+      required: [id, collectionId, bookNumber, nameArabic, nameEnglish, totalHadiths]
+
+    Hadith:
+      type: object
+      properties:
+        id:
+          type: string
+        collectionId:
+          type: string
+        bookNumber:
+          type: integer
+        hadithNumber:
+          type: integer
+        arabic:
+          type: string
+        english:
+          type: string
+        urdu:
+          type: string
+          nullable: true
+        narrator:
+          type: string
+          nullable: true
+        grade:
+          type: string
+          nullable: true
+        reference:
+          type: string
+      required: [id, collectionId, bookNumber, hadithNumber, arabic, english, reference]
+
+    HadithList:
+      type: object
+      properties:
+        hadiths:
+          type: array
+          items:
+            $ref: "#/components/schemas/Hadith"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [hadiths, total, page, totalPages]
+
+    HadithSearchResults:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Hadith"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [results, total, page, totalPages]
+
+    # ── Books schemas ─────────────────────────────────────────────────────────
+    BookCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        nameArabic:
+          type: string
+          nullable: true
+        bookCount:
+          type: integer
+      required: [id, name, bookCount]
+
+    Book:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        titleArabic:
+          type: string
+          nullable: true
+        author:
+          type: string
+        authorArabic:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+        language:
+          type: string
+        description:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        totalChapters:
+          type: integer
+        isPublic:
+          type: boolean
+        publishedYear:
+          type: integer
+          nullable: true
+      required: [id, title, author, categoryId, language, totalChapters, isPublic]
+
+    BookDetail:
+      allOf:
+        - $ref: "#/components/schemas/Book"
+        - type: object
+          properties:
+            chapters:
+              type: array
+              items:
+                $ref: "#/components/schemas/BookChapter"
+
+    BookChapter:
+      type: object
+      properties:
+        id:
+          type: string
+        bookId:
+          type: string
+        chapterNumber:
+          type: integer
+        title:
+          type: string
+        titleArabic:
+          type: string
+          nullable: true
+      required: [id, bookId, chapterNumber, title]
+
+    BookChapterDetail:
+      allOf:
+        - $ref: "#/components/schemas/BookChapter"
+        - type: object
+          properties:
+            content:
+              type: string
+            contentArabic:
+              type: string
+              nullable: true
+          required: [content]
+
+    BookList:
+      type: object
+      properties:
+        books:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [books, total, page, totalPages]
+
+    BookSearchResults:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [results, total, page, totalPages]
+
+    # ── Learning schemas ──────────────────────────────────────────────────────
+    LearningPath:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        topic:
+          type: string
+        totalLessons:
+          type: integer
+        estimatedHours:
+          type: number
+        coverUrl:
+          type: string
+          nullable: true
+        enrolledCount:
+          type: integer
+      required: [id, title, description, level, topic, totalLessons, estimatedHours, enrolledCount]
+
+    Lesson:
+      type: object
+      properties:
+        id:
+          type: string
+        pathId:
+          type: string
+        lessonNumber:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        references:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reference"
+        estimatedMinutes:
+          type: integer
+      required: [id, pathId, lessonNumber, title, content, references, estimatedMinutes]
+
+    Reference:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [quran, hadith, book]
+        sourceId:
+          type: string
+        label:
+          type: string
+        text:
+          type: string
+          nullable: true
+      required: [type, sourceId, label]
+
+    LearningPathDetail:
+      allOf:
+        - $ref: "#/components/schemas/LearningPath"
+        - type: object
+          properties:
+            lessons:
+              type: array
+              items:
+                $ref: "#/components/schemas/LessonSummary"
+          required: [lessons]
+
+    LessonSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        lessonNumber:
+          type: integer
+        title:
+          type: string
+        estimatedMinutes:
+          type: integer
+      required: [id, lessonNumber, title, estimatedMinutes]
+
+    Enrollment:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        pathId:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        progressPercent:
+          type: number
+      required: [id, userId, pathId, startedAt, progressPercent]
+
+    EnrollmentWithProgress:
+      allOf:
+        - $ref: "#/components/schemas/Enrollment"
+        - type: object
+          properties:
+            path:
+              $ref: "#/components/schemas/LearningPath"
+            completedLessons:
+              type: integer
+          required: [path, completedLessons]
+
+    LessonProgress:
+      type: object
+      properties:
+        lessonId:
+          type: string
+        completed:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+      required: [lessonId, completed]
+
+    # ── Notes schemas ─────────────────────────────────────────────────────────
+    Note:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        sourceType:
+          type: string
+          enum: [quran, hadith, book, general]
+          nullable: true
+        sourceId:
+          type: string
+          nullable: true
+        sourceLabel:
+          type: string
+          nullable: true
+        folderId:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, userId, title, content, tags, createdAt, updatedAt]
+
+    NoteList:
+      type: object
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Note"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [notes, total, page, totalPages]
+
+    CreateNoteRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        sourceType:
+          type: string
+          enum: [quran, hadith, book, general]
+          nullable: true
+        sourceId:
+          type: string
+          nullable: true
+        sourceLabel:
+          type: string
+          nullable: true
+        folderId:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+      required: [title, content]
+
+    UpdateNoteRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        folderId:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+
+    # ── Bookmarks schemas ─────────────────────────────────────────────────────
+    Bookmark:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        sourceType:
+          type: string
+          enum: [quran, hadith, book]
+        sourceId:
+          type: string
+        label:
+          type: string
+        folderId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, sourceType, sourceId, label, createdAt]
+
+    BookmarkList:
+      type: object
+      properties:
+        bookmarks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bookmark"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [bookmarks, total, page, totalPages]
+
+    CreateBookmarkRequest:
+      type: object
+      properties:
+        sourceType:
+          type: string
+          enum: [quran, hadith, book]
+        sourceId:
+          type: string
+        label:
+          type: string
+        folderId:
+          type: string
+          nullable: true
+      required: [sourceType, sourceId, label]
+
+    # ── Folders schemas ───────────────────────────────────────────────────────
+    Folder:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        noteCount:
+          type: integer
+        bookmarkCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, name, noteCount, bookmarkCount, createdAt]
+
+    FolderDetail:
+      allOf:
+        - $ref: "#/components/schemas/Folder"
+        - type: object
+          properties:
+            notes:
+              type: array
+              items:
+                $ref: "#/components/schemas/Note"
+            bookmarks:
+              type: array
+              items:
+                $ref: "#/components/schemas/Bookmark"
+          required: [notes, bookmarks]
+
+    CreateFolderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+      required: [name]
+
+    UpdateFolderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+
+    # ── Progress schemas ──────────────────────────────────────────────────────
+    ProgressDashboard:
+      type: object
+      properties:
+        readingStreak:
+          type: integer
+        totalReadingMinutes:
+          type: integer
+        completedLessons:
+          type: integer
+        enrolledPaths:
+          type: integer
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+        weeklyReadingMinutes:
+          type: array
+          items:
+            type: integer
+      required: [readingStreak, totalReadingMinutes, completedLessons, enrolledPaths, recentActivity, weeklyReadingMinutes]
+
+    ReadingStreak:
+      type: object
+      properties:
+        current:
+          type: integer
+        longest:
+          type: integer
+        lastReadAt:
+          type: string
+          format: date-time
+          nullable: true
+      required: [current, longest]
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [quran_read, hadith_read, book_read, lesson_completed, note_created]
+        description:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required: [id, type, description, timestamp]
+
+    LogActivityRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [quran_read, hadith_read, book_read]
+        sourceId:
+          type: string
+        durationMinutes:
+          type: integer
+      required: [type, sourceId, durationMinutes]
+
+    # ── Admin schemas ─────────────────────────────────────────────────────────
+    AdminStats:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        activeUsersToday:
+          type: integer
+        totalBooks:
+          type: integer
+        totalLearningPaths:
+          type: integer
+        totalNotes:
+          type: integer
+        totalBookmarks:
+          type: integer
+        newUsersThisWeek:
+          type: integer
+        totalEnrollments:
+          type: integer
+      required: [totalUsers, activeUsersToday, totalBooks, totalLearningPaths, totalNotes, totalBookmarks, newUsersThisWeek, totalEnrollments]
+
+    AdminUserList:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [users, total, page, totalPages]
+
+    AdminCreateBookRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        titleArabic:
+          type: string
+          nullable: true
+        author:
+          type: string
+        authorArabic:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+        language:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+        publishedYear:
+          type: integer
+          nullable: true
+      required: [title, author, categoryId, language, isPublic]
+
+    AdminUpdateBookRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        titleArabic:
+          type: string
+          nullable: true
+        author:
+          type: string
+        authorArabic:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+
+    AdminCreateLearningPathRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        topic:
+          type: string
+        estimatedHours:
+          type: number
+      required: [title, description, level, topic, estimatedHours]
+
+    AdminUpdateLearningPathRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        topic:
+          type: string
+        estimatedHours:
+          type: number

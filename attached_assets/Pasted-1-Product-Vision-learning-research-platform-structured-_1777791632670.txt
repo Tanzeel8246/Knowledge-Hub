@@ -1,0 +1,104 @@
+1) Product Vision
+
+ایک ایسا اسلامی learning + research platform جو structured study, authentic references, اور modern research workflow کو ایک جگہ جمع کرے۔
+
+Tagline Ideas:
+
+Learn Islam Structurally
+Your Digital Islamic Study Companion
+Research, Learn, Organize, Reflect
+2) MVP Scope (Phase 1)
+Core Features
+Quran Search + Tafsir
+Hadith Search
+Islamic Books Library
+Topic-based Learning Paths
+Notes / Bookmarks
+Folder-based Research Workspace
+Reference Export / Share
+User Accounts + Progress Tracking
+3) Advanced Phase 2 Features
+AI Assisted Explanation Layer
+AI Summary of Selected References
+Related Topic Suggestions
+Scholar Workspace
+Lesson / Khutbah Builder
+Collaborative Study Groups
+Institute / Madrasa Dashboards
+4) Suggested Database / Content Sources
+
+Important: Licensing and permissions must be verified before production use.
+
+Quran / Tafsir
+Quran.com APIs / datasets
+Tanzil project text
+Hadith
+Public hadith datasets / licensed collections
+Structured Sunnah datasets
+Books
+Public domain Islamic works
+Partner publisher integrations
+Self-hosted scanned/text libraries (with rights)
+5) Recommended Tech Architecture
+Mobile App
+Flutter (best for Android + iOS from one codebase)
+Backend
+Node.js / NestJS
+PostgreSQL
+Elasticsearch / Meilisearch for full-text search
+Admin Panel
+React / Next.js dashboard
+AI Layer (Optional)
+Retrieval-based assistant over curated library
+Citation-first responses only
+6) Database Model (High-Level)
+Entities
+Users
+Books
+Authors
+Chapters
+References
+Notes
+Bookmarks
+Learning Paths
+Lessons
+Progress Records
+Collections/Folders
+7) Monetization Funnel
+Free Plan
+Basic reading/search
+Limited bookmarks
+Limited learning paths
+Premium Monthly
+Advanced search filters
+AI study assistant
+Unlimited notes/folders
+Scholar toolkit
+Export/Research tools
+B2B
+Madrasah licensing
+Institute white-label platform
+8) Growth Strategy
+Organic Acquisition
+SEO landing pages for Islamic topics
+Shareable reference links
+Public searchable web portal
+Community
+Telegram/WhatsApp study groups
+Weekly study challenges
+Scholar partnerships
+9) MVP Development Roadmap
+Sprint 1
+Authentication
+User Profiles
+Library Data Schema
+Sprint 2
+Quran/Hadith Search Engine
+Sprint 3
+Reading Interface
+Sprint 4
+Notes / Bookmarks / Folders
+Sprint 5
+Learning Paths
+Sprint 6
+Progress Tracking / Polish
