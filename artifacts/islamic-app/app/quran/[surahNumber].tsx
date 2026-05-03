@@ -43,7 +43,7 @@ export default function SurahReaderScreen() {
 
   if (isLoading) {
     return (
-      <View style={[s.container, { backgroundColor: colors.background, justifyContent: "center", alignItems: "center" }]}>
+      <View style={[s.container, { backgroundColor: colors.background, justifyContent: "center", alignItems: "center" }]}> 
         <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
@@ -51,16 +51,15 @@ export default function SurahReaderScreen() {
 
   if (!surah) {
     return (
-      <View style={[s.container, { backgroundColor: colors.background, justifyContent: "center", alignItems: "center" }]}>
-        <Text style={[{ color: colors.mutedForeground }]}>Surah not found</Text>
+      <View style={[s.container, { backgroundColor: colors.background, justifyContent: "center", alignItems: "center" }]}> 
+        <Text style={{ color: colors.mutedForeground }}>Surah not found</Text>
       </View>
     );
   }
 
   return (
-    <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Sticky Header */}
-      <View style={[s.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+    <View style={[s.container, { backgroundColor: colors.background }]}> 
+      <View style={[s.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), backgroundColor: colors.background, borderBottomColor: colors.border }]}> 
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
@@ -79,7 +78,7 @@ export default function SurahReaderScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         ListHeaderComponent={
-          <View style={[s.bismillah, { backgroundColor: colors.navy }]}>
+          <View style={[s.bismillah, { backgroundColor: colors.navy }]}> 
             {surah.number !== 1 && surah.number !== 9 && (
               <Text style={s.bismillahText}>بِسۡمِ اللّٰهِ الرَّحۡمٰنِ الرَّحِيۡمِ</Text>
             )}
@@ -88,9 +87,9 @@ export default function SurahReaderScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={[s.ayah, { borderBottomColor: colors.border }]}>
+          <View style={[s.ayah, { borderBottomColor: colors.border }]}> 
             <View style={s.ayahHeader}>
-              <View style={[s.ayahNumber, { backgroundColor: colors.primary + "20" }]}>
+              <View style={[s.ayahNumber, { backgroundColor: colors.primary + "20" }]}> 
                 <Text style={[s.ayahNumberText, { color: colors.primary }]}>{item.numberInSurah}</Text>
               </View>
               <TouchableOpacity onPress={() => handleBookmark(item)}>

@@ -42,7 +42,6 @@ export default function BooksScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
@@ -53,7 +52,6 @@ export default function BooksScreen() {
         </View>
       </View>
 
-      {/* Search */}
       <View style={[s.searchBar, { backgroundColor: colors.card, borderColor: colors.border, marginHorizontal: 16, marginTop: 12 }]}>
         <Feather name="search" size={16} color={colors.mutedForeground} />
         <TextInput
@@ -70,7 +68,6 @@ export default function BooksScreen() {
         )}
       </View>
 
-      {/* Language Filter */}
       <View style={s.langRow}>
         {langOptions.map(opt => (
           <TouchableOpacity
@@ -88,13 +85,8 @@ export default function BooksScreen() {
         ))}
       </View>
 
-      {/* Category Filter */}
       {categories && categories.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.categoryScroll}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.categoryScroll}>
           <TouchableOpacity
             onPress={() => setSelectedCategory(null)}
             style={[s.catChip, {
@@ -134,7 +126,6 @@ export default function BooksScreen() {
               style={[s.bookCard, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={() => router.push(`/book/${item.id}` as any)}
             >
-              {/* Left accent */}
               <View style={[s.accent, { backgroundColor: colors.gold }]} />
               <View style={s.bookInfo}>
                 <View style={s.bookTop}>
@@ -148,13 +139,9 @@ export default function BooksScreen() {
                   )}
                 </View>
                 <Text style={[s.bookTitle, { color: colors.foreground }]}>{item.title}</Text>
-                {item.titleArabic && (
-                  <Text style={[s.bookArabic, { color: colors.gold }]}>{item.titleArabic}</Text>
-                )}
+                {item.titleArabic && <Text style={[s.bookArabic, { color: colors.gold }]}>{item.titleArabic}</Text>}
                 <Text style={[s.bookAuthor, { color: colors.mutedForeground }]}>by {item.author}</Text>
-                {item.description && (
-                  <Text style={[s.bookDesc, { color: colors.mutedForeground }]} numberOfLines={2}>{item.description}</Text>
-                )}
+                {item.description && <Text style={[s.bookDesc, { color: colors.mutedForeground }]} numberOfLines={2}>{item.description}</Text>}
                 <View style={s.bookMeta}>
                   <Feather name="layers" size={12} color={colors.mutedForeground} />
                   <Text style={[s.bookMetaText, { color: colors.mutedForeground }]}>{item.totalChapters} chapters</Text>

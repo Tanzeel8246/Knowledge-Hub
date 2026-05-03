@@ -62,17 +62,17 @@ export default function RegisterScreen() {
         <Text style={[s.subtitle, { color: colors.mutedForeground }]}>Join the Islamic learning community</Text>
 
         <View style={[s.form, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[s.inputGroup, { borderBottomColor: colors.border }]}>
+          <View style={[s.inputGroup, { borderBottomColor: colors.border }]}> 
             <Text style={[s.label, { color: colors.mutedForeground }]}>Full Name</Text>
             <TextInput style={[s.input, { color: colors.foreground }]} placeholder="Your name" placeholderTextColor={colors.mutedForeground} value={name} onChangeText={setName} autoCapitalize="words" />
           </View>
-          <View style={[s.inputGroup, { borderBottomColor: colors.border }]}>
+          <View style={[s.inputGroup, { borderBottomColor: colors.border }]}> 
             <Text style={[s.label, { color: colors.mutedForeground }]}>Email</Text>
-            <TextInput style={[s.input, { color: colors.foreground }]} placeholder="your@email.com" placeholderTextColor={colors.mutedForeground} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+            <TextInput style={[s.input, { color: colors.foreground }]} placeholder="your@email.com" placeholderTextColor={colors.mutedForeground} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" textContentType="username" />
           </View>
           <View style={s.inputGroup}>
             <Text style={[s.label, { color: colors.mutedForeground }]}>Password</Text>
-            <TextInput style={[s.input, { color: colors.foreground }]} placeholder="Min 8 characters" placeholderTextColor={colors.mutedForeground} value={password} onChangeText={setPassword} secureTextEntry />
+            <TextInput style={[s.input, { color: colors.foreground }]} placeholder="Min 8 characters" placeholderTextColor={colors.mutedForeground} value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" />
           </View>
         </View>
 
@@ -90,7 +90,7 @@ export default function RegisterScreen() {
 
         <View style={s.loginRow}>
           <Text style={[s.loginText, { color: colors.mutedForeground }]}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => router.push("/auth/login")}>
+          <TouchableOpacity onPress={() => router.push("/auth/login") }>
             <Text style={[s.loginLink, { color: colors.primary }]}>Sign in</Text>
           </TouchableOpacity>
         </View>

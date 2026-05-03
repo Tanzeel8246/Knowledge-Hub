@@ -43,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(JSON.parse(storedUser));
         }
       } catch {
+        await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
       } finally {
         setIsLoading(false);
       }

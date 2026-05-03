@@ -21,8 +21,8 @@ export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("admin@islamicresearch.app");
+  const [password, setPassword] = useState("admin123456");
   const loginMutation = useLogin();
 
   const s = makeStyles(colors);
@@ -48,16 +48,14 @@ export default function LoginScreen() {
         contentContainerStyle={[s.content, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 40) }]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Brand */}
         <View style={[s.brand, { backgroundColor: colors.navy }]}>
           <Text style={s.brandArabic}>الإسلام</Text>
         </View>
         <Text style={[s.title, { color: colors.foreground }]}>Islamic Research OS</Text>
         <Text style={[s.subtitle, { color: colors.mutedForeground }]}>Sign in to continue your learning journey</Text>
 
-        {/* Form */}
         <View style={[s.form, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[s.inputGroup, { borderBottomColor: colors.border }]}>
+          <View style={[s.inputGroup, { borderBottomColor: colors.border }]}> 
             <Text style={[s.label, { color: colors.mutedForeground }]}>Email</Text>
             <TextInput
               style={[s.input, { color: colors.foreground }]}
@@ -68,6 +66,8 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="email"
+              textContentType="username"
             />
           </View>
           <View style={s.inputGroup}>
@@ -79,6 +79,8 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              autoComplete="current-password"
+              textContentType="password"
             />
           </View>
         </View>
@@ -95,14 +97,13 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Demo credentials */}
         <TouchableOpacity onPress={() => { setEmail("admin@islamicresearch.app"); setPassword("admin123456"); }}>
           <Text style={[s.demo, { color: colors.primary }]}>Use demo credentials</Text>
         </TouchableOpacity>
 
         <View style={s.registerRow}>
           <Text style={[s.registerText, { color: colors.mutedForeground }]}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => router.push("/auth/register")}>
+          <TouchableOpacity onPress={() => router.push("/auth/register") }>
             <Text style={[s.registerLink, { color: colors.primary }]}>Create one</Text>
           </TouchableOpacity>
         </View>
