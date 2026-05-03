@@ -32,10 +32,20 @@ export default function QuranScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 20) }]}>
-        <Text style={[s.title, { color: colors.foreground }]}>The Holy Quran</Text>
-        <Text style={[s.subtitle, { color: colors.gold }]}>القرآن الكريم</Text>
+        <View style={s.headerTop}>
+          <View>
+            <Text style={[s.title, { color: colors.foreground }]}>The Holy Quran</Text>
+            <Text style={[s.subtitle, { color: colors.gold }]}>القرآن الكريم</Text>
+          </View>
+          <TouchableOpacity
+            style={[s.qarisBtn, { backgroundColor: colors.navy }]}
+            onPress={() => router.push("/qaris" as any)}
+          >
+            <Feather name="mic" size={16} color={colors.gold} />
+            <Text style={[s.qarisBtnText, { color: colors.gold }]}>Reciters</Text>
+          </TouchableOpacity>
+        </View>
         <View style={[s.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Feather name="search" size={16} color={colors.mutedForeground} />
           <TextInput
@@ -73,7 +83,10 @@ export default function QuranScreen() {
                 <Text style={[s.name, { color: colors.foreground }]}>{item.nameTransliteration}</Text>
                 <Text style={[s.meta, { color: colors.mutedForeground }]}>{item.nameEnglish} · {item.totalAyahs} ayahs · {item.revelationType}</Text>
               </View>
-              <Text style={[s.arabic, { color: colors.gold }]}>{item.nameArabic}</Text>
+              <View style={s.right}>
+                <Text style={[s.arabic, { color: colors.gold }]}>{item.nameArabic}</Text>
+                <Feather name="headphones" size={14} color={colors.mutedForeground} style={{ marginTop: 4 }} />
+              </View>
             </TouchableOpacity>
           )}
           ListEmptyComponent={
@@ -91,8 +104,11 @@ function makeStyles(colors: any) {
   return StyleSheet.create({
     container: { flex: 1 },
     header: { paddingHorizontal: 20, paddingBottom: 16 },
+    headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
     title: { fontSize: 26, fontFamily: "Inter_700Bold", marginBottom: 2 },
-    subtitle: { fontSize: 16, marginBottom: 16 },
+    subtitle: { fontSize: 16 },
+    qarisBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12 },
+    qarisBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
     searchBar: { flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, gap: 10 },
     searchInput: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
     surahItem: { flexDirection: "row", alignItems: "center", borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, gap: 14 },
@@ -101,6 +117,7 @@ function makeStyles(colors: any) {
     info: { flex: 1 },
     name: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
     meta: { fontSize: 12, fontFamily: "Inter_400Regular" },
+    right: { alignItems: "flex-end" },
     arabic: { fontSize: 20 },
     empty: { alignItems: "center", marginTop: 40 },
     emptyText: { fontSize: 15, fontFamily: "Inter_400Regular" },

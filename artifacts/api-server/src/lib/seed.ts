@@ -160,6 +160,331 @@ export async function seedIslamicContent() {
     ]).onConflictDoNothing();
   }
 
+  // Extended Books: Tafseer, Hadith, Fiqh etc. (added after initial seed)
+  const allBooks = await db.select().from(booksTable);
+  if (allBooks.length < 15) {
+    logger.info("Seeding extended Islamic library...");
+    const allCats = await db.select().from(bookCategoriesTable);
+    const tafsirCat = allCats.find(c => c.name.includes("Tafsir"));
+    const aqeedahCat = allCats.find(c => c.name.includes("Aqeedah"));
+    const fiqhCat = allCats.find(c => c.name.includes("Fiqh"));
+    const seerahCat = allCats.find(c => c.name.includes("Seerah"));
+    const ethicsCat = allCats.find(c => c.name.includes("Ethics"));
+    const hadithCatRec = allCats.find(c => c.name.includes("Hadith"));
+
+    if (tafsirCat && aqeedahCat && fiqhCat && seerahCat && ethicsCat && hadithCatRec) {
+      const newBooks = await db.insert(booksTable).values([
+        // Tafseer Books
+        {
+          title: "Tafsir Ibn Kathir (Abridged)",
+          titleArabic: "تفسير ابن كثير",
+          author: "Imam Ibn Kathir",
+          authorArabic: "الإمام ابن كثير",
+          categoryId: tafsirCat.id,
+          language: "en",
+          description: "One of the most widely read and respected works of Quranic exegesis, authored by the great 14th-century Islamic scholar. Relies heavily on authentic hadiths and the words of the Companions.",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1370,
+        },
+        {
+          title: "Tafsir al-Jalalayn",
+          titleArabic: "تفسير الجلالين",
+          author: "Jalal ad-Din al-Suyuti & Jalal ad-Din al-Mahalli",
+          authorArabic: "جلال الدين السيوطي والمحلي",
+          categoryId: tafsirCat.id,
+          language: "ar",
+          description: "A concise and highly authoritative tafsir of the entire Quran, written by two scholars both named Jalal ad-Din. One of the most widely studied works in Islamic education.",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1505,
+        },
+        {
+          title: "Fi Zilal al-Quran (In the Shade of the Quran)",
+          titleArabic: "في ظلال القرآن",
+          author: "Sayyid Qutb",
+          authorArabic: "سيد قطب",
+          categoryId: tafsirCat.id,
+          language: "ar",
+          description: "A comprehensive modern tafsir emphasizing the Quran's guidance for contemporary life and society. Written partially while the author was in prison.",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1966,
+        },
+        {
+          title: "Ma'ariful Quran",
+          titleArabic: "معارف القرآن",
+          author: "Mufti Muhammad Shafi Usmani",
+          authorArabic: "مفتي محمد شفيع العثماني",
+          categoryId: tafsirCat.id,
+          language: "ur",
+          description: "A comprehensive Urdu tafsir (commentary) of the Quran, widely read in South Asia. It covers fiqh rulings, linguistic analysis, and spiritual guidance.",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1969,
+        },
+        {
+          title: "Tafhimul Quran",
+          titleArabic: "تفهيم القرآن",
+          author: "Sayyid Abul Ala Maududi",
+          authorArabic: "سيد أبو الأعلى المودودي",
+          categoryId: tafsirCat.id,
+          language: "ur",
+          description: "A detailed Urdu commentary on the Quran focusing on its message, literary aspects, and application to modern life. A landmark work of 20th-century Islamic literature.",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1972,
+        },
+        {
+          title: "Tafsir al-Tabari (Jami al-Bayan)",
+          titleArabic: "جامع البيان في تأويل القرآن",
+          author: "Imam Ibn Jarir al-Tabari",
+          authorArabic: "الإمام ابن جرير الطبري",
+          categoryId: tafsirCat.id,
+          language: "ar",
+          description: "The oldest and most exhaustive classical tafsir, compiling reports from the Companions and Successors. Considered the foundational work of Quranic exegesis.",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 923,
+        },
+        // Hadith Books
+        {
+          title: "Muwatta Imam Malik",
+          titleArabic: "الموطأ",
+          author: "Imam Malik ibn Anas",
+          authorArabic: "الإمام مالك بن أنس",
+          categoryId: hadithCatRec.id,
+          language: "ar",
+          description: "The earliest surviving written collection of hadith, compiled by the founder of the Maliki school of jurisprudence. Considered highly authentic.",
+          totalChapters: 61,
+          isPublic: true,
+          publishedYear: 795,
+        },
+        {
+          title: "Bulugh al-Maram (Attainment of the Objective)",
+          titleArabic: "بلوغ المرام من أدلة الأحكام",
+          author: "Ibn Hajar al-Asqalani",
+          authorArabic: "ابن حجر العسقلاني",
+          categoryId: hadithCatRec.id,
+          language: "en",
+          description: "A collection of 1,358 hadiths related to Islamic jurisprudence, widely used in fiqh study. Each hadith includes a grading and source reference.",
+          totalChapters: 16,
+          isPublic: true,
+          publishedYear: 1430,
+        },
+        {
+          title: "Al-Arba'een al-Nawawiyyah (40 Hadith Nawawi)",
+          titleArabic: "الأربعون النووية",
+          author: "Imam an-Nawawi",
+          authorArabic: "الإمام النووي",
+          categoryId: hadithCatRec.id,
+          language: "en",
+          description: "A foundational collection of 42 hadiths covering the core principles and pillars of Islam. Perhaps the most memorized collection of hadith worldwide.",
+          totalChapters: 5,
+          isPublic: true,
+          publishedYear: 1283,
+        },
+        {
+          title: "Al-Adab al-Mufrad",
+          titleArabic: "الأدب المفرد",
+          author: "Imam al-Bukhari",
+          authorArabic: "الإمام البخاري",
+          categoryId: hadithCatRec.id,
+          language: "en",
+          description: "A collection of 1,322 hadiths focusing on Islamic manners, character, and social conduct — compiled by the author of Sahih al-Bukhari.",
+          totalChapters: 42,
+          isPublic: true,
+          publishedYear: 870,
+        },
+        {
+          title: "Mishkat al-Masabih",
+          titleArabic: "مشكاة المصابيح",
+          author: "Al-Khatib at-Tabrizi",
+          authorArabic: "الخطيب التبريزي",
+          categoryId: hadithCatRec.id,
+          language: "en",
+          description: "An expanded collection of over 5,000 hadiths drawn from major canonical collections, arranged by topic and widely used in Islamic seminaries.",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1340,
+        },
+        {
+          title: "Sunan al-Darimi",
+          titleArabic: "سنن الدارمي",
+          author: "Imam al-Darimi",
+          authorArabic: "الإمام الدارمي",
+          categoryId: hadithCatRec.id,
+          language: "ar",
+          description: "One of the major hadith collections containing approximately 3,500 hadiths, covering Islamic law, Quran sciences, and prophetic traditions.",
+          totalChapters: 24,
+          isPublic: true,
+          publishedYear: 869,
+        },
+        // Fiqh Books
+        {
+          title: "Fiqh al-Sunnah",
+          titleArabic: "فقه السنة",
+          author: "Sayyid Sabiq",
+          authorArabic: "سيد سابق",
+          categoryId: fiqhCat.id,
+          language: "en",
+          description: "A comprehensive guide to Islamic jurisprudence based directly on the Quran and Sunnah, covering worship, transactions, family law, and more.",
+          totalChapters: 14,
+          isPublic: true,
+          publishedYear: 1945,
+        },
+        {
+          title: "Reliance of the Traveller (Umdat as-Salik)",
+          titleArabic: "عمدة السالك وعدة الناسك",
+          author: "Ahmad ibn Naqib al-Misri",
+          authorArabic: "أحمد بن النقيب المصري",
+          categoryId: fiqhCat.id,
+          language: "en",
+          description: "A classic Shafi'i manual of Islamic jurisprudence, covering ritual worship, commercial dealings, marriage, and ethics.",
+          totalChapters: 25,
+          isPublic: true,
+          publishedYear: 1368,
+        },
+        // Ethics & Spirituality
+        {
+          title: "Ihya Ulum al-Din (Revival of the Religious Sciences)",
+          titleArabic: "إحياء علوم الدين",
+          author: "Imam al-Ghazali",
+          authorArabic: "الإمام الغزالي",
+          categoryId: ethicsCat.id,
+          language: "ar",
+          description: "Considered one of the greatest works of Islamic literature, covering the external acts of worship and the internal purification of the soul.",
+          totalChapters: 40,
+          isPublic: true,
+          publishedYear: 1107,
+        },
+        {
+          title: "The Beginning of Guidance (Bidayat al-Hidayah)",
+          titleArabic: "بداية الهداية",
+          author: "Imam al-Ghazali",
+          authorArabic: "الإمام الغزالي",
+          categoryId: ethicsCat.id,
+          language: "en",
+          description: "A concise guide to the path of spiritual development, written by Imam al-Ghazali as a practical introduction to Islamic ethics and spirituality.",
+          totalChapters: 10,
+          isPublic: true,
+          publishedYear: 1095,
+        },
+        // Seerah
+        {
+          title: "Muhammad: His Life Based on the Earliest Sources",
+          titleArabic: "سيرة النبي الكريم",
+          author: "Martin Lings (Abu Bakr Siraj ad-Din)",
+          categoryId: seerahCat.id,
+          language: "en",
+          description: "A beautifully written biography of the Prophet Muhammad (PBUH) based on authentic 8th and 9th century Arabic sources.",
+          totalChapters: 87,
+          isPublic: true,
+          publishedYear: 1983,
+        },
+        {
+          title: "Seerah Ibn Hisham",
+          titleArabic: "السيرة النبوية لابن هشام",
+          author: "Ibn Hisham",
+          authorArabic: "ابن هشام",
+          categoryId: seerahCat.id,
+          language: "ar",
+          description: "The earliest and most authoritative biography of Prophet Muhammad (PBUH), based on the original work of Ibn Ishaq. The primary reference for all later biographies.",
+          totalChapters: 45,
+          isPublic: true,
+          publishedYear: 833,
+        },
+      ]).returning();
+
+      // Add sample chapters for key new books
+      if (newBooks.length > 0) {
+        const tafirIbnKathir = newBooks.find(b => b.title.includes("Ibn Kathir"));
+        const arbaeen = newBooks.find(b => b.title.includes("Arba"));
+        const ihya = newBooks.find(b => b.title.includes("Ihya"));
+        const bulugh = newBooks.find(b => b.title.includes("Bulugh"));
+
+        const chaptersToInsert = [];
+
+        if (tafirIbnKathir) {
+          chaptersToInsert.push(
+            { bookId: tafirIbnKathir.id, chapterNumber: 1, title: "Surah Al-Fatihah", titleArabic: "تفسير سورة الفاتحة", content: "Al-Fatihah consists of seven verses. It is called Al-Fatihah (The Opening) because it opens the Book of Allah.\n\nIbn Abi Hatim narrated that the Prophet (PBUH) said: 'Al-Fatihah is the greatest surah in the Quran.'\n\nAllah divides the prayer between Himself and His servant in two halves:\n- 'All praise is for Allah, Lord of the worlds' — this is for Allah\n- 'The Especially Merciful' — this is for Allah\n- 'Sovereign of the Day of Recompense' — this is for Allah\n- 'It is You we worship and You we ask for help' — this is shared\n- 'Guide us to the straight path' — this is for the servant\n\nAl-Fatihah includes all the meanings of the Quran: the oneness of Allah, promises of reward, warnings, legal rulings, and stories of the prophets." },
+            { bookId: tafirIbnKathir.id, chapterNumber: 2, title: "Surah Al-Baqarah: Introduction", titleArabic: "تفسير مطلع سورة البقرة", content: "Al-Baqarah is the longest surah in the Quran with 286 verses. It is Medinan. It contains Ayat al-Kursi (2:255) — the greatest verse in the Quran — as well as the last two verses of Surah al-Baqarah which are a special gift to this Ummah.\n\nThe Prophet (PBUH) said: 'Do not make your houses like graves. Verily, the shaytan flees from a house in which Surah al-Baqarah is recited.' (Muslim)\n\nThe name Al-Baqarah (The Cow) refers to the story of the Israelites who were commanded to slaughter a cow (2:67–73).\n\nMajor themes: Guidance for believers; stories of Bani Israel; laws of fasting, Hajj, marriage, divorce, business; direction of prayer (qiblah) changed to Makkah; the beginning of jihad rulings." },
+          );
+        }
+
+        if (arbaeen) {
+          chaptersToInsert.push(
+            { bookId: arbaeen.id, chapterNumber: 1, title: "Hadiths 1-10: Foundations of Intention and Religion", content: "**Hadith 1 — Actions by Intentions**\nNarrated by Umar ibn al-Khattab (RA): The Messenger of Allah (PBUH) said: 'Actions are judged by their intentions, and for every person is what they intended. Whoever emigrated for the sake of Allah and His Messenger, then his emigration was for Allah and His Messenger. Whoever emigrated to gain some worldly benefit or to marry a woman, then his emigration was for whatever he emigrated for.' [Bukhari & Muslim]\n\nThis hadith is foundational — scholars have said it is one-third of all Islamic knowledge.\n\n**Hadith 2 — Islam, Iman, and Ihsan**\nNarrated by Umar (RA): Jibreel asked the Prophet (PBUH) about Islam, Iman, and Ihsan. The Prophet said: 'Islam is to testify that there is no deity worthy of worship but Allah and that Muhammad is the Messenger of Allah, to establish the prayers, to pay the zakat, to fast in Ramadan, and to make the pilgrimage if you are able.' Iman is to believe in Allah, His angels, His books, His messengers, the Last Day, and divine decree. Ihsan is to worship Allah as if you see Him, for even if you do not see Him, He surely sees you.' [Muslim]\n\n**Hadith 5 — Innovations are Rejected**\nNarrated by Aisha (RA): The Messenger of Allah (PBUH) said: 'Whoever innovates something in this matter of ours [Islam] that is not part of it will have it rejected.' [Bukhari & Muslim]" },
+            { bookId: arbaeen.id, chapterNumber: 2, title: "Hadiths 11-20: Rights of People and Ethics", content: "**Hadith 12 — Leaving What Does Not Concern You**\nThe Prophet (PBUH) said: 'Part of the perfection of someone's Islam is his leaving alone what does not concern him.' [Tirmidhi — Hasan]\n\nThis is a comprehensive principle: avoid wasting time and energy on matters that have no benefit for you in this life or the next.\n\n**Hadith 13 — Love for Your Brother What You Love for Yourself**\n'None of you will have faith until he loves for his brother what he loves for himself.' [Bukhari & Muslim]\n\n**Hadith 15 — Whoever Believes in Allah Should Speak Good or Remain Silent**\n'Whoever believes in Allah and the Last Day should speak good or remain silent. Whoever believes in Allah and the Last Day should be generous to his neighbor. Whoever believes in Allah and the Last Day should honor his guest.' [Bukhari & Muslim]\n\n**Hadith 18 — Fear Allah Wherever You Are**\nMu'adh ibn Jabal (RA) reported that the Prophet (PBUH) said: 'Fear Allah wherever you are, follow up a bad deed with a good one and it will wipe it out, and treat people with good manners.' [Tirmidhi — Hasan]" },
+          );
+        }
+
+        if (ihya) {
+          chaptersToInsert.push(
+            { bookId: ihya.id, chapterNumber: 1, title: "The Book of Knowledge (Kitab al-Ilm)", titleArabic: "كتاب العلم", content: "Praise be to Allah who has singled out the scholars for distinction and made them the inheritors of the prophets. He has set them apart from all other people and made them witnesses over mankind.\n\nKnowledge ('ilm) is divided into:\n1. **Fard 'Ayn** — Obligatory on every individual Muslim: knowing the articles of faith, the pillars of Islam, how to purify oneself and pray\n2. **Fard Kifayah** — Obligatory on the community collectively: medicine, mathematics, jurisprudence, and other sciences needed for society\n\nThe Messenger of Allah (PBUH) said: 'Seeking knowledge is an obligation upon every Muslim.' And: 'Whoever travels a path in search of knowledge, Allah will make easy for him a path to Paradise.'\n\nThe virtues of knowledge are innumerable. The scholar ('alim) is better than the worshipper ('abid) as the moon is better than all the stars. The ink of the scholar is weighed against the blood of the martyr on the Day of Resurrection." },
+            { bookId: ihya.id, chapterNumber: 2, title: "The Book of the Foundations of Belief (Qawa'id al-Aqaid)", titleArabic: "كتاب قواعد العقائد", content: "The foundation of faith is the knowledge of the Creator — His existence, oneness, power, will, knowledge, and all His divine attributes.\n\nAllah is One, without partner. He is Pre-eternal (Qadim), without beginning. He is Ever-Lasting (Baqi), without end. He is not a body, not a substance, not a form. He is not limited by directions or places. Nothing resembles Him, and He resembles nothing.\n\nThe heart must be purified of all qualities that lead it astray: showing-off (riya), arrogance (kibr), envy (hasad), covetousness (hirs). These diseases of the heart prevent the light of faith from shining within.\n\nIslamic spirituality (tasawwuf) is the science of purifying the heart. The Prophet (PBUH) came to teach three things: recitation of the Quran, purification of the soul (tazkiyah), and wisdom (hikmah)." },
+          );
+        }
+
+        if (bulugh) {
+          chaptersToInsert.push(
+            { bookId: bulugh.id, chapterNumber: 1, title: "Book of Purification (Kitab al-Taharah)", titleArabic: "كتاب الطهارة", content: "**Hadith 1**: Abu Hurayrah (RA) reported that the Messenger of Allah (PBUH) said: 'The key to prayer is purification (taharah), its beginning is takbir (saying Allahu Akbar), and its ending is taslim (saying as-salamu alaykum).' [Reported by the five — Abu Dawud, Tirmidhi, Nasa'i, Ibn Majah, Ahmad — graded Sahih by Ibn Hibban]\n\n**Hadith 2**: Abu Hurayrah (RA) reported that the Messenger of Allah (PBUH) said: 'Were it not that I fear burdening my community, I would have commanded them to use the siwak (toothstick) for every prayer.' [Agreed upon (Bukhari & Muslim)]\n\n**Hadith 3**: Abu Malik al-Ashari (RA) reported that the Messenger of Allah (PBUH) said: 'Purity (taharah) is half of faith. Alhamdulillah fills the scale. SubhanAllah and Alhamdulillah together fill — or one of them fills — what is between the heavens and the earth. Prayer (salah) is a light. Charity (sadaqah) is a proof. Patience (sabr) is an illumination. The Quran is a proof for or against you. Every person goes out in the morning and trades his soul — either freeing it or destroying it.' [Muslim]" },
+            { bookId: bulugh.id, chapterNumber: 2, title: "Book of Prayer (Kitab as-Salah)", titleArabic: "كتاب الصلاة", content: "**Hadith 168**: Ibn Umar (RA) narrated that the Prophet (PBUH) said: 'Prayer is obligatory five times each day and night.' [Abu Dawud and Nasa'i — Sahih]\n\n**Hadith 178**: Jabir (RA) reported that the Prophet (PBUH) said: 'Between a man and disbelief and polytheism is the abandonment of prayer.' [Muslim]\n\n**Hadith 183**: Ibn Mas'ud (RA) asked the Prophet (PBUH): 'Which deed is most beloved to Allah?' He said: 'Prayer at its proper time.' He was then asked: 'Then what?' He said: 'Honoring one's parents.' Then again: 'Then what?' He said: 'Jihad in the path of Allah.' [Agreed upon]\n\n**Hadith 195**: Abu Hurayrah (RA) reported that the Messenger of Allah (PBUH) said: 'Do you think that if there was a river at the door of one of you in which he bathed five times a day, would any filth remain on him?' They said: 'No filth would remain.' He said: 'That is the likeness of the five daily prayers with which Allah wipes away sins.' [Agreed upon]" },
+          );
+        }
+
+        if (chaptersToInsert.length > 0) {
+          await db.insert(bookChaptersTable).values(chaptersToInsert).onConflictDoNothing();
+        }
+      }
+    }
+  }
+
+  // Also seed more hadith collections if missing
+  const allCollections = await db.select().from(hadithCollectionsTable);
+  if (allCollections.length < 8) {
+    logger.info("Seeding extended hadith collections...");
+    await db.insert(hadithCollectionsTable).values([
+      { id: "muwatta", name: "Muwatta Imam Malik", nameArabic: "الموطأ", author: "Imam Malik ibn Anas", totalHadiths: 1720, description: "The earliest surviving major collection of hadith, compiled by the founder of the Maliki school. Considered highly authentic by scholars." },
+      { id: "darimi", name: "Sunan al-Darimi", nameArabic: "سنن الدارمي", author: "Imam al-Darimi", totalHadiths: 3500, description: "A major hadith collection arranged by legal topics, compiled by Abd Allah ibn Abd al-Rahman al-Darimi." },
+    ]).onConflictDoNothing();
+
+    await db.insert(hadithBooksTable).values([
+      { collectionId: "muwatta", bookNumber: 1, nameArabic: "كتاب الطهارة", nameEnglish: "Book of Purification", totalHadiths: 131 },
+      { collectionId: "muwatta", bookNumber: 2, nameArabic: "كتاب الصلاة", nameEnglish: "Book of Prayer", totalHadiths: 90 },
+      { collectionId: "muwatta", bookNumber: 3, nameArabic: "كتاب الزكاة", nameEnglish: "Book of Zakat", totalHadiths: 41 },
+      { collectionId: "darimi", bookNumber: 1, nameArabic: "كتاب المقدمة", nameEnglish: "Introduction", totalHadiths: 65 },
+      { collectionId: "darimi", bookNumber: 2, nameArabic: "كتاب الطهارة", nameEnglish: "Book of Purification", totalHadiths: 101 },
+    ]).onConflictDoNothing();
+
+    await db.insert(hadithsTable).values([
+      {
+        collectionId: "muwatta", bookNumber: 1, hadithNumber: 1,
+        arabic: "إِنَّ الطَّهُورَ شَطْرُ الإِيمَانِ",
+        english: "Cleanliness is half of faith. Alhamdulillah fills the scale...",
+        narrator: "Abu Malik al-Ash'ari (RA)",
+        grade: "Sahih",
+        reference: "Muwatta Malik 1:1",
+      },
+      {
+        collectionId: "muwatta", bookNumber: 2, hadithNumber: 1,
+        arabic: "الصَّلاةُ عِمَادُ الدِّينِ مَنْ أَقَامَهَا فَقَدْ أَقَامَ الدِّينَ وَمَنْ هَدَمَهَا فَقَدْ هَدَمَ الدِّينَ",
+        english: "Prayer is the pillar of the religion. Whoever establishes it has established the religion, and whoever destroys it has destroyed the religion.",
+        narrator: "Transmitted from the Prophet (PBUH)",
+        grade: "Hasan",
+        reference: "Muwatta Malik 2:1",
+      },
+      {
+        collectionId: "darimi", bookNumber: 1, hadithNumber: 1,
+        arabic: "الْعِلْمُ إِمَامُ الْعَمَلِ وَالْعَمَلُ تَابِعُهُ",
+        english: "Knowledge is the leader of action, and action follows it.",
+        narrator: "Reported from scholars",
+        grade: "Mawquf",
+        reference: "Sunan al-Darimi 1:1",
+      },
+    ]).onConflictDoNothing();
+  }
+
   // Learning Paths
   const existingPaths = await db.select().from(learningPathsTable).limit(1);
   if (existingPaths.length === 0) {

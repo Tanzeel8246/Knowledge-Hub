@@ -48,6 +48,7 @@ function RootLayoutNav() {
       <Stack.Screen name="learning/[pathId]" options={{ headerShown: false }} />
       <Stack.Screen name="learning/[pathId]/[lessonId]" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
+      <Stack.Screen name="qaris" options={{ headerShown: false }} />
     </Stack>
   );
 }

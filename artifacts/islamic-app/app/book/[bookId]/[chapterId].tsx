@@ -30,9 +30,7 @@ export default function ChapterReaderScreen() {
   const handleBookmark = async () => {
     try {
       await createBookmark.mutateAsync({
-        sourceType: "book",
-        sourceId: chapterId,
-        label: chapter?.title ?? "Book Chapter",
+        data: { sourceType: "book", sourceId: chapterId, label: chapter?.title ?? "Book Chapter" },
       });
       queryClient.invalidateQueries({ queryKey: ["/bookmarks"] });
       Alert.alert("Bookmarked", "Chapter saved to your workspace");

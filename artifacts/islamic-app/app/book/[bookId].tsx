@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,14 +7,14 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  ScrollView,
+  Alert,
+  Linking,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useGetBook, useGetBookChapters, useCreateBookmark } from "@workspace/api-client-react";
+import { useGetBook, useGetBookChapters } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { useQueryClient } from "@tanstack/react-query";
 
 export default function BookDetailScreen() {
   const colors = useColors();
@@ -22,11 +22,9 @@ export default function BookDetailScreen() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const { data: book, isLoading: bookLoading } = useGetBook(bookId);
   const { data: chapters, isLoading: chaptersLoading } = useGetBookChapters(bookId);
-  const createBookmark = useCreateBookmark();
-  const queryClient = useQueryClient();
+  const [downloading, setDownloading] = useState(false);
 
   const s = makeStyles(colors);
-
   const isLoading = bookLoading || chaptersLoading;
 
   if (isLoading) {
@@ -45,6 +43,49 @@ export default function BookDetailScreen() {
     );
   }
 
+  const handleDownload = async () => {
+    if (!book || !chapters) return;
+    try {
+      setDownloading(true);
+      let content = `${book.title}\n`;
+      if (book.titleArabic) content += `${book.titleArabic}\n`;
+      content += `Author: ${book.author}\n\n`;
+      if (book.description) content += `${book.description}\n\n`;
+      content += "=".repeat(60) + "\n\n";
+      for (const ch of chapters) {
+        content += `Chapter ${ch.chapterNumber}: ${ch.title}\n`;
+        if (ch.titleArabic) content += `${ch.titleArabic}\n`;
+        content += "-".repeat(40) + "\n";
+        content += ((ch as any).content ?? "") + "\n\n";
+      }
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${book.title.replace(/[^a-z0-9]/gi, "_")}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setDownloading(false);
+        return;
+      }
+
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${book.title.replace(/[^a-z0-9]/gi, "_")}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDownloading(false);
+      Alert.alert("Downloaded!", `"${book.title}" saved.`, [{ text: "OK" }]);
+    } catch (e) {
+      setDownloading(false);
+      Alert.alert("Error", "Could not download the book. Please try again.");
+    }
+  };
+
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <FlatList
@@ -54,11 +95,26 @@ export default function BookDetailScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         ListHeaderComponent={
           <View>
-            {/* Hero */}
             <View style={[s.hero, { backgroundColor: colors.navy, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 20) }]}>
-              <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-                <Feather name="arrow-left" size={22} color="#FFF" />
-              </TouchableOpacity>
+              <View style={s.heroTop}>
+                <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+                  <Feather name="arrow-left" size={22} color="#FFF" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.downloadBtn, { backgroundColor: downloading ? "#FFFFFF20" : colors.gold + "30", borderColor: colors.gold }]}
+                  onPress={handleDownload}
+                  disabled={downloading}
+                >
+                  {downloading ? (
+                    <ActivityIndicator color={colors.gold} size="small" />
+                  ) : (
+                    <>
+                      <Feather name="download" size={14} color={colors.gold} />
+                      <Text style={[s.downloadBtnText, { color: colors.gold }]}>Download</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
 
               <View style={[s.langBadge, { backgroundColor: colors.gold + "25" }]}>
                 <Text style={[s.langBadgeText, { color: colors.gold }]}>{book.language.toUpperCase()}</Text>
@@ -93,7 +149,7 @@ export default function BookDetailScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => (
           <TouchableOpacity
             style={[s.chapterItem, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push(`/book/${bookId}/${item.id}` as any)}
@@ -106,9 +162,9 @@ export default function BookDetailScreen() {
               {item.titleArabic && (
                 <Text style={[s.chapterArabic, { color: colors.gold }]}>{item.titleArabic}</Text>
               )}
-              {item.content && (
+              {(item as any).content && (
                 <Text style={[s.chapterPreview, { color: colors.mutedForeground }]} numberOfLines={2}>
-                  {item.content}
+                  {(item as any).content}
                 </Text>
               )}
             </View>
@@ -130,7 +186,10 @@ function makeStyles(colors: any) {
   return StyleSheet.create({
     container: { flex: 1 },
     hero: { paddingHorizontal: 20, paddingBottom: 24 },
-    backBtn: { marginBottom: 16 },
+    heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+    backBtn: {},
+    downloadBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1 },
+    downloadBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
     langBadge: { alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 10 },
     langBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
     heroTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#FFFFFF", marginBottom: 4 },
