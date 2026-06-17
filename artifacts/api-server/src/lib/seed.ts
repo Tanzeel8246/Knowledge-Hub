@@ -6,7 +6,70 @@ import {
   learningPathsTable, lessonsTable,
 } from "@workspace/db";
 import bcrypt from "bcryptjs";
+import { sql } from "drizzle-orm";
 import { logger } from "./logger";
+
+interface AlquranAyah {
+  number: number;
+  text: string;
+  numberInSurah: number;
+  juz: number;
+  page: number;
+}
+interface AlquranSurah {
+  number: number;
+  ayahs: AlquranAyah[];
+}
+interface AlquranResponse {
+  data: { surahs: AlquranSurah[] };
+}
+
+export async function seedQuranAyahsFromAPI(): Promise<void> {
+  logger.info("Fetching Quran text from api.alquran.cloud...");
+  const [arabicRes, englishRes] = await Promise.all([
+    fetch("https://api.alquran.cloud/v1/quran/quran-uthmani"),
+    fetch("https://api.alquran.cloud/v1/quran/en.sahih"),
+  ]);
+  if (!arabicRes.ok || !englishRes.ok) {
+    throw new Error(`alquran.cloud fetch failed: arabic=${arabicRes.status} english=${englishRes.status}`);
+  }
+  const arabicData = (await arabicRes.json()) as AlquranResponse;
+  const englishData = (await englishRes.json()) as AlquranResponse;
+
+  const engMap = new Map<number, Map<number, string>>();
+  for (const s of englishData.data.surahs) {
+    const m = new Map<number, string>();
+    for (const a of s.ayahs) m.set(a.numberInSurah, a.text);
+    engMap.set(s.number, m);
+  }
+
+  const ayahsToInsert: {
+    number: number; surahNumber: number; numberInSurah: number;
+    arabic: string; translationEn: string; juzNumber: number; pageNumber: number;
+  }[] = [];
+
+  for (const surah of arabicData.data.surahs) {
+    const engSurah = engMap.get(surah.number);
+    for (const a of surah.ayahs) {
+      ayahsToInsert.push({
+        number: a.number,
+        surahNumber: surah.number,
+        numberInSurah: a.numberInSurah,
+        arabic: a.text,
+        translationEn: engSurah?.get(a.numberInSurah) ?? "",
+        juzNumber: a.juz,
+        pageNumber: a.page,
+      });
+    }
+  }
+
+  const BATCH = 500;
+  for (let i = 0; i < ayahsToInsert.length; i += BATCH) {
+    await db.insert(ayahsTable).values(ayahsToInsert.slice(i, i + BATCH)).onConflictDoNothing();
+    logger.info(`Ayahs seeded: ${Math.min(i + BATCH, ayahsToInsert.length)}/${ayahsToInsert.length}`);
+  }
+  logger.info(`Quran seeding complete — ${ayahsToInsert.length} ayahs stored.`);
+}
 
 export async function seedIslamicContent() {
   logger.info("Checking if seed data is needed...");
@@ -535,10 +598,10 @@ export async function seedIslamicContent() {
     ]).onConflictDoNothing();
   }
 
-  // Surahs
-  const existingSurahs = await db.select().from(surahsTable).limit(1);
-  if (existingSurahs.length === 0) {
-    logger.info("Seeding surahs and ayahs...");
+  // Surahs — seed all 114
+  const [{ surahCount }] = await db.select({ surahCount: sql<number>`cast(count(*) as integer)` }).from(surahsTable);
+  if (surahCount < 114) {
+    logger.info(`Seeding all 114 surah metadata (currently ${surahCount})...`);
     await db.insert(surahsTable).values([
       { number: 1, nameArabic: "الفاتحة", nameTransliteration: "Al-Fatihah", nameEnglish: "The Opening", totalAyahs: 7, revelationType: "Meccan", juzStart: 1 },
       { number: 2, nameArabic: "البقرة", nameTransliteration: "Al-Baqarah", nameEnglish: "The Cow", totalAyahs: 286, revelationType: "Medinan", juzStart: 1 },
@@ -550,29 +613,121 @@ export async function seedIslamicContent() {
       { number: 8, nameArabic: "الأنفال", nameTransliteration: "Al-Anfal", nameEnglish: "The Spoils of War", totalAyahs: 75, revelationType: "Medinan", juzStart: 9 },
       { number: 9, nameArabic: "التوبة", nameTransliteration: "At-Tawbah", nameEnglish: "The Repentance", totalAyahs: 129, revelationType: "Medinan", juzStart: 10 },
       { number: 10, nameArabic: "يونس", nameTransliteration: "Yunus", nameEnglish: "Jonah", totalAyahs: 109, revelationType: "Meccan", juzStart: 11 },
+      { number: 11, nameArabic: "هود", nameTransliteration: "Hud", nameEnglish: "Hud", totalAyahs: 123, revelationType: "Meccan", juzStart: 11 },
+      { number: 12, nameArabic: "يوسف", nameTransliteration: "Yusuf", nameEnglish: "Joseph", totalAyahs: 111, revelationType: "Meccan", juzStart: 12 },
+      { number: 13, nameArabic: "الرعد", nameTransliteration: "Ar-Ra'd", nameEnglish: "The Thunder", totalAyahs: 43, revelationType: "Medinan", juzStart: 13 },
+      { number: 14, nameArabic: "إبراهيم", nameTransliteration: "Ibrahim", nameEnglish: "Abraham", totalAyahs: 52, revelationType: "Meccan", juzStart: 13 },
+      { number: 15, nameArabic: "الحجر", nameTransliteration: "Al-Hijr", nameEnglish: "The Rocky Tract", totalAyahs: 99, revelationType: "Meccan", juzStart: 14 },
+      { number: 16, nameArabic: "النحل", nameTransliteration: "An-Nahl", nameEnglish: "The Bee", totalAyahs: 128, revelationType: "Meccan", juzStart: 14 },
+      { number: 17, nameArabic: "الإسراء", nameTransliteration: "Al-Isra", nameEnglish: "The Night Journey", totalAyahs: 111, revelationType: "Meccan", juzStart: 15 },
+      { number: 18, nameArabic: "الكهف", nameTransliteration: "Al-Kahf", nameEnglish: "The Cave", totalAyahs: 110, revelationType: "Meccan", juzStart: 15 },
+      { number: 19, nameArabic: "مريم", nameTransliteration: "Maryam", nameEnglish: "Mary", totalAyahs: 98, revelationType: "Meccan", juzStart: 16 },
+      { number: 20, nameArabic: "طه", nameTransliteration: "Ta-Ha", nameEnglish: "Ta-Ha", totalAyahs: 135, revelationType: "Meccan", juzStart: 16 },
+      { number: 21, nameArabic: "الأنبياء", nameTransliteration: "Al-Anbiya", nameEnglish: "The Prophets", totalAyahs: 112, revelationType: "Meccan", juzStart: 17 },
+      { number: 22, nameArabic: "الحج", nameTransliteration: "Al-Hajj", nameEnglish: "The Pilgrimage", totalAyahs: 78, revelationType: "Medinan", juzStart: 17 },
+      { number: 23, nameArabic: "المؤمنون", nameTransliteration: "Al-Mu'minun", nameEnglish: "The Believers", totalAyahs: 118, revelationType: "Meccan", juzStart: 18 },
+      { number: 24, nameArabic: "النور", nameTransliteration: "An-Nur", nameEnglish: "The Light", totalAyahs: 64, revelationType: "Medinan", juzStart: 18 },
+      { number: 25, nameArabic: "الفرقان", nameTransliteration: "Al-Furqan", nameEnglish: "The Criterion", totalAyahs: 77, revelationType: "Meccan", juzStart: 18 },
+      { number: 26, nameArabic: "الشعراء", nameTransliteration: "Ash-Shu'ara", nameEnglish: "The Poets", totalAyahs: 227, revelationType: "Meccan", juzStart: 19 },
+      { number: 27, nameArabic: "النمل", nameTransliteration: "An-Naml", nameEnglish: "The Ant", totalAyahs: 93, revelationType: "Meccan", juzStart: 19 },
+      { number: 28, nameArabic: "القصص", nameTransliteration: "Al-Qasas", nameEnglish: "The Stories", totalAyahs: 88, revelationType: "Meccan", juzStart: 20 },
+      { number: 29, nameArabic: "العنكبوت", nameTransliteration: "Al-'Ankabut", nameEnglish: "The Spider", totalAyahs: 69, revelationType: "Meccan", juzStart: 20 },
+      { number: 30, nameArabic: "الروم", nameTransliteration: "Ar-Rum", nameEnglish: "The Romans", totalAyahs: 60, revelationType: "Meccan", juzStart: 21 },
+      { number: 31, nameArabic: "لقمان", nameTransliteration: "Luqman", nameEnglish: "Luqman", totalAyahs: 34, revelationType: "Meccan", juzStart: 21 },
+      { number: 32, nameArabic: "السجدة", nameTransliteration: "As-Sajdah", nameEnglish: "The Prostration", totalAyahs: 30, revelationType: "Meccan", juzStart: 21 },
+      { number: 33, nameArabic: "الأحزاب", nameTransliteration: "Al-Ahzab", nameEnglish: "The Combined Forces", totalAyahs: 73, revelationType: "Medinan", juzStart: 21 },
+      { number: 34, nameArabic: "سبأ", nameTransliteration: "Saba", nameEnglish: "Sheba", totalAyahs: 54, revelationType: "Meccan", juzStart: 22 },
+      { number: 35, nameArabic: "فاطر", nameTransliteration: "Fatir", nameEnglish: "Originator", totalAyahs: 45, revelationType: "Meccan", juzStart: 22 },
       { number: 36, nameArabic: "يس", nameTransliteration: "Ya-Sin", nameEnglish: "Ya Sin", totalAyahs: 83, revelationType: "Meccan", juzStart: 22 },
-      { number: 55, nameArabic: "الرحمن", nameTransliteration: "Ar-Rahman", nameEnglish: "The Most Gracious", totalAyahs: 78, revelationType: "Medinan", juzStart: 27 },
+      { number: 37, nameArabic: "الصافات", nameTransliteration: "As-Saffat", nameEnglish: "Those Ranged in Ranks", totalAyahs: 182, revelationType: "Meccan", juzStart: 23 },
+      { number: 38, nameArabic: "ص", nameTransliteration: "Sad", nameEnglish: "The Letter Sad", totalAyahs: 88, revelationType: "Meccan", juzStart: 23 },
+      { number: 39, nameArabic: "الزمر", nameTransliteration: "Az-Zumar", nameEnglish: "The Troops", totalAyahs: 75, revelationType: "Meccan", juzStart: 23 },
+      { number: 40, nameArabic: "غافر", nameTransliteration: "Ghafir", nameEnglish: "The Forgiver", totalAyahs: 85, revelationType: "Meccan", juzStart: 24 },
+      { number: 41, nameArabic: "فصلت", nameTransliteration: "Fussilat", nameEnglish: "Explained in Detail", totalAyahs: 54, revelationType: "Meccan", juzStart: 24 },
+      { number: 42, nameArabic: "الشورى", nameTransliteration: "Ash-Shuraa", nameEnglish: "The Consultation", totalAyahs: 53, revelationType: "Meccan", juzStart: 25 },
+      { number: 43, nameArabic: "الزخرف", nameTransliteration: "Az-Zukhruf", nameEnglish: "The Ornaments of Gold", totalAyahs: 89, revelationType: "Meccan", juzStart: 25 },
+      { number: 44, nameArabic: "الدخان", nameTransliteration: "Ad-Dukhan", nameEnglish: "The Smoke", totalAyahs: 59, revelationType: "Meccan", juzStart: 25 },
+      { number: 45, nameArabic: "الجاثية", nameTransliteration: "Al-Jathiyah", nameEnglish: "The Crouching", totalAyahs: 37, revelationType: "Meccan", juzStart: 25 },
+      { number: 46, nameArabic: "الأحقاف", nameTransliteration: "Al-Ahqaf", nameEnglish: "The Wind-Curved Sandhills", totalAyahs: 35, revelationType: "Meccan", juzStart: 26 },
+      { number: 47, nameArabic: "محمد", nameTransliteration: "Muhammad", nameEnglish: "Muhammad", totalAyahs: 38, revelationType: "Medinan", juzStart: 26 },
+      { number: 48, nameArabic: "الفتح", nameTransliteration: "Al-Fath", nameEnglish: "The Victory", totalAyahs: 29, revelationType: "Medinan", juzStart: 26 },
+      { number: 49, nameArabic: "الحجرات", nameTransliteration: "Al-Hujurat", nameEnglish: "The Rooms", totalAyahs: 18, revelationType: "Medinan", juzStart: 26 },
+      { number: 50, nameArabic: "ق", nameTransliteration: "Qaf", nameEnglish: "The Letter Qaf", totalAyahs: 45, revelationType: "Meccan", juzStart: 26 },
+      { number: 51, nameArabic: "الذاريات", nameTransliteration: "Adh-Dhariyat", nameEnglish: "The Winnowing Winds", totalAyahs: 60, revelationType: "Meccan", juzStart: 26 },
+      { number: 52, nameArabic: "الطور", nameTransliteration: "At-Tur", nameEnglish: "The Mount", totalAyahs: 49, revelationType: "Meccan", juzStart: 27 },
+      { number: 53, nameArabic: "النجم", nameTransliteration: "An-Najm", nameEnglish: "The Star", totalAyahs: 62, revelationType: "Meccan", juzStart: 27 },
+      { number: 54, nameArabic: "القمر", nameTransliteration: "Al-Qamar", nameEnglish: "The Moon", totalAyahs: 55, revelationType: "Meccan", juzStart: 27 },
+      { number: 55, nameArabic: "الرحمن", nameTransliteration: "Ar-Rahman", nameEnglish: "The Beneficent", totalAyahs: 78, revelationType: "Medinan", juzStart: 27 },
+      { number: 56, nameArabic: "الواقعة", nameTransliteration: "Al-Waqi'ah", nameEnglish: "The Inevitable", totalAyahs: 96, revelationType: "Meccan", juzStart: 27 },
+      { number: 57, nameArabic: "الحديد", nameTransliteration: "Al-Hadid", nameEnglish: "The Iron", totalAyahs: 29, revelationType: "Medinan", juzStart: 27 },
+      { number: 58, nameArabic: "المجادلة", nameTransliteration: "Al-Mujadila", nameEnglish: "The Pleading Woman", totalAyahs: 22, revelationType: "Medinan", juzStart: 28 },
+      { number: 59, nameArabic: "الحشر", nameTransliteration: "Al-Hashr", nameEnglish: "The Exile", totalAyahs: 24, revelationType: "Medinan", juzStart: 28 },
+      { number: 60, nameArabic: "الممتحنة", nameTransliteration: "Al-Mumtahanah", nameEnglish: "She That Is to Be Examined", totalAyahs: 13, revelationType: "Medinan", juzStart: 28 },
+      { number: 61, nameArabic: "الصف", nameTransliteration: "As-Saf", nameEnglish: "The Ranks", totalAyahs: 14, revelationType: "Medinan", juzStart: 28 },
+      { number: 62, nameArabic: "الجمعة", nameTransliteration: "Al-Jumu'ah", nameEnglish: "Friday", totalAyahs: 11, revelationType: "Medinan", juzStart: 28 },
+      { number: 63, nameArabic: "المنافقون", nameTransliteration: "Al-Munafiqun", nameEnglish: "The Hypocrites", totalAyahs: 11, revelationType: "Medinan", juzStart: 28 },
+      { number: 64, nameArabic: "التغابن", nameTransliteration: "At-Taghabun", nameEnglish: "Mutual Disillusion", totalAyahs: 18, revelationType: "Medinan", juzStart: 28 },
+      { number: 65, nameArabic: "الطلاق", nameTransliteration: "At-Talaq", nameEnglish: "Divorce", totalAyahs: 12, revelationType: "Medinan", juzStart: 28 },
+      { number: 66, nameArabic: "التحريم", nameTransliteration: "At-Tahrim", nameEnglish: "The Prohibition", totalAyahs: 12, revelationType: "Medinan", juzStart: 28 },
       { number: 67, nameArabic: "الملك", nameTransliteration: "Al-Mulk", nameEnglish: "The Sovereignty", totalAyahs: 30, revelationType: "Meccan", juzStart: 29 },
+      { number: 68, nameArabic: "القلم", nameTransliteration: "Al-Qalam", nameEnglish: "The Pen", totalAyahs: 52, revelationType: "Meccan", juzStart: 29 },
+      { number: 69, nameArabic: "الحاقة", nameTransliteration: "Al-Haqqah", nameEnglish: "The Reality", totalAyahs: 52, revelationType: "Meccan", juzStart: 29 },
+      { number: 70, nameArabic: "المعارج", nameTransliteration: "Al-Ma'arij", nameEnglish: "The Ascending Stairways", totalAyahs: 44, revelationType: "Meccan", juzStart: 29 },
+      { number: 71, nameArabic: "نوح", nameTransliteration: "Nuh", nameEnglish: "Noah", totalAyahs: 28, revelationType: "Meccan", juzStart: 29 },
+      { number: 72, nameArabic: "الجن", nameTransliteration: "Al-Jinn", nameEnglish: "The Jinn", totalAyahs: 28, revelationType: "Meccan", juzStart: 29 },
+      { number: 73, nameArabic: "المزمل", nameTransliteration: "Al-Muzzammil", nameEnglish: "The Enshrouded One", totalAyahs: 20, revelationType: "Meccan", juzStart: 29 },
+      { number: 74, nameArabic: "المدثر", nameTransliteration: "Al-Muddaththir", nameEnglish: "The Cloaked One", totalAyahs: 56, revelationType: "Meccan", juzStart: 29 },
+      { number: 75, nameArabic: "القيامة", nameTransliteration: "Al-Qiyamah", nameEnglish: "The Resurrection", totalAyahs: 40, revelationType: "Meccan", juzStart: 29 },
+      { number: 76, nameArabic: "الإنسان", nameTransliteration: "Al-Insan", nameEnglish: "Man", totalAyahs: 31, revelationType: "Medinan", juzStart: 29 },
+      { number: 77, nameArabic: "المرسلات", nameTransliteration: "Al-Mursalat", nameEnglish: "The Emissaries", totalAyahs: 50, revelationType: "Meccan", juzStart: 29 },
       { number: 78, nameArabic: "النبأ", nameTransliteration: "An-Naba", nameEnglish: "The Announcement", totalAyahs: 40, revelationType: "Meccan", juzStart: 30 },
+      { number: 79, nameArabic: "النازعات", nameTransliteration: "An-Nazi'at", nameEnglish: "Those Who Drag Forth", totalAyahs: 46, revelationType: "Meccan", juzStart: 30 },
+      { number: 80, nameArabic: "عبس", nameTransliteration: "Abasa", nameEnglish: "He Frowned", totalAyahs: 42, revelationType: "Meccan", juzStart: 30 },
+      { number: 81, nameArabic: "التكوير", nameTransliteration: "At-Takwir", nameEnglish: "The Overthrowing", totalAyahs: 29, revelationType: "Meccan", juzStart: 30 },
+      { number: 82, nameArabic: "الإنفطار", nameTransliteration: "Al-Infitar", nameEnglish: "The Cleaving", totalAyahs: 19, revelationType: "Meccan", juzStart: 30 },
+      { number: 83, nameArabic: "المطففين", nameTransliteration: "Al-Mutaffifin", nameEnglish: "The Defrauding", totalAyahs: 36, revelationType: "Meccan", juzStart: 30 },
+      { number: 84, nameArabic: "الإنشقاق", nameTransliteration: "Al-Inshiqaq", nameEnglish: "The Sundering", totalAyahs: 25, revelationType: "Meccan", juzStart: 30 },
+      { number: 85, nameArabic: "البروج", nameTransliteration: "Al-Buruj", nameEnglish: "The Mansions of the Stars", totalAyahs: 22, revelationType: "Meccan", juzStart: 30 },
+      { number: 86, nameArabic: "الطارق", nameTransliteration: "At-Tariq", nameEnglish: "The Nightcomer", totalAyahs: 17, revelationType: "Meccan", juzStart: 30 },
+      { number: 87, nameArabic: "الأعلى", nameTransliteration: "Al-A'la", nameEnglish: "The Most High", totalAyahs: 19, revelationType: "Meccan", juzStart: 30 },
+      { number: 88, nameArabic: "الغاشية", nameTransliteration: "Al-Ghashiyah", nameEnglish: "The Overwhelming", totalAyahs: 26, revelationType: "Meccan", juzStart: 30 },
+      { number: 89, nameArabic: "الفجر", nameTransliteration: "Al-Fajr", nameEnglish: "The Dawn", totalAyahs: 30, revelationType: "Meccan", juzStart: 30 },
+      { number: 90, nameArabic: "البلد", nameTransliteration: "Al-Balad", nameEnglish: "The City", totalAyahs: 20, revelationType: "Meccan", juzStart: 30 },
+      { number: 91, nameArabic: "الشمس", nameTransliteration: "Ash-Shams", nameEnglish: "The Sun", totalAyahs: 15, revelationType: "Meccan", juzStart: 30 },
+      { number: 92, nameArabic: "الليل", nameTransliteration: "Al-Layl", nameEnglish: "The Night", totalAyahs: 21, revelationType: "Meccan", juzStart: 30 },
+      { number: 93, nameArabic: "الضحى", nameTransliteration: "Ad-Duha", nameEnglish: "The Morning Hours", totalAyahs: 11, revelationType: "Meccan", juzStart: 30 },
+      { number: 94, nameArabic: "الشرح", nameTransliteration: "Ash-Sharh", nameEnglish: "The Relief", totalAyahs: 8, revelationType: "Meccan", juzStart: 30 },
+      { number: 95, nameArabic: "التين", nameTransliteration: "At-Tin", nameEnglish: "The Fig", totalAyahs: 8, revelationType: "Meccan", juzStart: 30 },
+      { number: 96, nameArabic: "العلق", nameTransliteration: "Al-Alaq", nameEnglish: "The Clot", totalAyahs: 19, revelationType: "Meccan", juzStart: 30 },
+      { number: 97, nameArabic: "القدر", nameTransliteration: "Al-Qadr", nameEnglish: "The Power", totalAyahs: 5, revelationType: "Meccan", juzStart: 30 },
+      { number: 98, nameArabic: "البينة", nameTransliteration: "Al-Bayyinah", nameEnglish: "The Clear Proof", totalAyahs: 8, revelationType: "Medinan", juzStart: 30 },
+      { number: 99, nameArabic: "الزلزلة", nameTransliteration: "Az-Zalzalah", nameEnglish: "The Earthquake", totalAyahs: 8, revelationType: "Medinan", juzStart: 30 },
+      { number: 100, nameArabic: "العاديات", nameTransliteration: "Al-Adiyat", nameEnglish: "The Chargers", totalAyahs: 11, revelationType: "Meccan", juzStart: 30 },
+      { number: 101, nameArabic: "القارعة", nameTransliteration: "Al-Qari'ah", nameEnglish: "The Calamity", totalAyahs: 11, revelationType: "Meccan", juzStart: 30 },
+      { number: 102, nameArabic: "التكاثر", nameTransliteration: "At-Takathur", nameEnglish: "The Rivalry in World Increase", totalAyahs: 8, revelationType: "Meccan", juzStart: 30 },
+      { number: 103, nameArabic: "العصر", nameTransliteration: "Al-Asr", nameEnglish: "The Declining Day", totalAyahs: 3, revelationType: "Meccan", juzStart: 30 },
+      { number: 104, nameArabic: "الهمزة", nameTransliteration: "Al-Humazah", nameEnglish: "The Traducer", totalAyahs: 9, revelationType: "Meccan", juzStart: 30 },
+      { number: 105, nameArabic: "الفيل", nameTransliteration: "Al-Fil", nameEnglish: "The Elephant", totalAyahs: 5, revelationType: "Meccan", juzStart: 30 },
+      { number: 106, nameArabic: "قريش", nameTransliteration: "Quraysh", nameEnglish: "Quraysh", totalAyahs: 4, revelationType: "Meccan", juzStart: 30 },
+      { number: 107, nameArabic: "الماعون", nameTransliteration: "Al-Ma'un", nameEnglish: "The Small Kindnesses", totalAyahs: 7, revelationType: "Meccan", juzStart: 30 },
+      { number: 108, nameArabic: "الكوثر", nameTransliteration: "Al-Kawthar", nameEnglish: "The Abundance", totalAyahs: 3, revelationType: "Meccan", juzStart: 30 },
+      { number: 109, nameArabic: "الكافرون", nameTransliteration: "Al-Kafirun", nameEnglish: "The Disbelievers", totalAyahs: 6, revelationType: "Meccan", juzStart: 30 },
+      { number: 110, nameArabic: "النصر", nameTransliteration: "An-Nasr", nameEnglish: "The Divine Support", totalAyahs: 3, revelationType: "Medinan", juzStart: 30 },
+      { number: 111, nameArabic: "المسد", nameTransliteration: "Al-Masad", nameEnglish: "The Palm Fibre", totalAyahs: 5, revelationType: "Meccan", juzStart: 30 },
       { number: 112, nameArabic: "الإخلاص", nameTransliteration: "Al-Ikhlas", nameEnglish: "The Sincerity", totalAyahs: 4, revelationType: "Meccan", juzStart: 30 },
       { number: 113, nameArabic: "الفلق", nameTransliteration: "Al-Falaq", nameEnglish: "The Daybreak", totalAyahs: 5, revelationType: "Meccan", juzStart: 30 },
       { number: 114, nameArabic: "الناس", nameTransliteration: "An-Nas", nameEnglish: "Mankind", totalAyahs: 6, revelationType: "Meccan", juzStart: 30 },
     ]).onConflictDoNothing();
+    logger.info("All 114 surah metadata seeded.");
+  }
 
-    await db.insert(ayahsTable).values([
-      { number: 1, surahNumber: 1, numberInSurah: 1, arabic: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", translationEn: "In the name of Allah, the Entirely Merciful, the Especially Merciful.", translationUr: "اللہ کے نام سے جو نہایت مہربان رحم کرنے والا ہے۔", juzNumber: 1, pageNumber: 1 },
-      { number: 2, surahNumber: 1, numberInSurah: 2, arabic: "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ", translationEn: "[All] praise is [due] to Allah, Lord of the worlds -", translationUr: "سب تعریف اللہ کے لیے ہے جو تمام جہانوں کا رب ہے۔", juzNumber: 1, pageNumber: 1 },
-      { number: 3, surahNumber: 1, numberInSurah: 3, arabic: "الرَّحْمَٰنِ الرَّحِيمِ", translationEn: "The Entirely Merciful, the Especially Merciful,", translationUr: "جو بے انتہا مہربان اور نہایت رحم والا ہے۔", juzNumber: 1, pageNumber: 1 },
-      { number: 4, surahNumber: 1, numberInSurah: 4, arabic: "مَالِكِ يَوْمِ الدِّينِ", translationEn: "Sovereign of the Day of Recompense.", translationUr: "جزا کے دن کا مالک ہے۔", juzNumber: 1, pageNumber: 1 },
-      { number: 5, surahNumber: 1, numberInSurah: 5, arabic: "إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ", translationEn: "It is You we worship and You we ask for help.", translationUr: "ہم صرف تیری ہی عبادت کرتے ہیں اور صرف تجھ ہی سے مدد مانگتے ہیں۔", juzNumber: 1, pageNumber: 1 },
-      { number: 6, surahNumber: 1, numberInSurah: 6, arabic: "اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ", translationEn: "Guide us to the straight path -", translationUr: "ہمیں سیدھی راہ دکھا۔", juzNumber: 1, pageNumber: 1 },
-      { number: 7, surahNumber: 1, numberInSurah: 7, arabic: "صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ", translationEn: "The path of those upon whom You have bestowed favor, not of those who have evoked [Your] anger or of those who are astray.", translationUr: "ان لوگوں کی راہ جن پر تو نے انعام کیا، نہ کہ ان پر غضب ہوا اور نہ گمراہوں کی۔", juzNumber: 1, pageNumber: 1 },
-      { number: 8, surahNumber: 2, numberInSurah: 1, arabic: "الٓمٓ", translationEn: "Alif, Lam, Meem.", juzNumber: 1, pageNumber: 2 },
-      { number: 9, surahNumber: 2, numberInSurah: 2, arabic: "ذَٰلِكَ الْكِتَابُ لَا رَيْبَ ۛ فِيهِ ۛ هُدًى لِّلْمُتَّقِينَ", translationEn: "This is the Book about which there is no doubt, a guidance for those conscious of Allah -", translationUr: "یہ وہ کتاب ہے جس میں کوئی شک نہیں، پرہیزگاروں کے لیے ہدایت ہے۔", juzNumber: 1, pageNumber: 2 },
-      { number: 10, surahNumber: 2, numberInSurah: 3, arabic: "الَّذِينَ يُؤْمِنُونَ بِالْغَيْبِ وَيُقِيمُونَ الصَّلَاةَ وَمِمَّا رَزَقْنَاهُمْ يُنفِقُونَ", translationEn: "Who believe in the unseen, establish prayer, and spend out of what We have provided for them,", juzNumber: 1, pageNumber: 2 },
-      { number: 11, surahNumber: 2, numberInSurah: 4, arabic: "وَالَّذِينَ يُؤْمِنُونَ بِمَا أُنزِلَ إِلَيْكَ وَمَا أُنزِلَ مِن قَبْلِكَ وَبِالْآخِرَةِ هُمْ يُوقِنُونَ", translationEn: "And who believe in what has been revealed to you, and what was revealed before you, and of the Hereafter they are certain [in faith].", juzNumber: 1, pageNumber: 2 },
-      { number: 12, surahNumber: 2, numberInSurah: 255, arabic: "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ", translationEn: "Allah - there is no deity except Him, the Ever-Living, the Sustainer of existence. Neither drowsiness overtakes Him nor sleep.", translationUr: "اللہ! اس کے سوا کوئی معبود نہیں، وہ ہمیشہ زندہ، سب کو قائم رکھنے والا ہے۔ اسے نہ اونگھ آتی ہے اور نہ نیند۔", juzNumber: 3, pageNumber: 42 },
-    ]).onConflictDoNothing();
+  // Ayahs — fetch from alquran.cloud if DB has fewer than 6000
+  const [{ ayahCount }] = await db.select({ ayahCount: sql<number>`cast(count(*) as integer)` }).from(ayahsTable);
+  if (ayahCount < 6000) {
+    logger.info(`Ayahs in DB: ${ayahCount}. Starting background Quran text seeding from alquran.cloud...`);
+    seedQuranAyahsFromAPI().catch(e => logger.error({ err: e }, "Quran ayah background seeding failed"));
+  } else {
+    logger.info(`Quran ayahs already seeded: ${ayahCount}`);
   }
 
   // Admin user
