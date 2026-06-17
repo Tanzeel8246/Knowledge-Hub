@@ -78,6 +78,8 @@ export default function ProfileScreen() {
       { icon: "music-note", label: "Tajweed Rules", route: "/tajweed", color: "#7C3AED", isMCIcon: true },
       { icon: "book-open-page-variant", label: "Seerah", route: "/seerah", color: "#D97706", isMCIcon: true },
       { icon: "account-heart", label: "Islamic Names", route: "/islamic-names", color: "#DC2626", isMCIcon: true },
+      { icon: "book-alphabet", label: "Islamic Glossary", route: "/glossary", color: "#7C3AED", isMCIcon: true },
+      { icon: "food-off", label: "Fasting Tracker", route: "/fasting-tracker", color: "#0891B2", isMCIcon: true },
     ],
   };
 

@@ -71,6 +71,9 @@ function RootLayoutNav() {
       <Stack.Screen name="tajweed" options={{ headerShown: false }} />
       <Stack.Screen name="seerah" options={{ headerShown: false }} />
       <Stack.Screen name="islamic-names" options={{ headerShown: false }} />
+      <Stack.Screen name="quran-juz" options={{ headerShown: false }} />
+      <Stack.Screen name="glossary" options={{ headerShown: false }} />
+      <Stack.Screen name="fasting-tracker" options={{ headerShown: false }} />
     </Stack>
   );
 }

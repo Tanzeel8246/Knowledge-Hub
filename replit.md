@@ -71,13 +71,20 @@ Expo React Native app with the following screens:
 - Tajweed Rules (`app/tajweed.tsx`) — 14 Tajweed rules covering Noon & Tanwin, Meem Sakinah, Madd elongation, Qalqalah, Waqf; category filter, detailed rule view with examples
 - Seerah (`app/seerah.tsx`) — Prophet Muhammad's ﷺ biography in 5 phases (Before Prophethood → Later Medinan), 30+ events with descriptions and extracted lessons
 - Islamic Names (`app/islamic-names.tsx`) — 75 Islamic names (male/female/both) with Arabic, meaning, origin, Quranic references, category filter (Prophetic/Quranic/Classical/Nature/Virtue), gender filter, search
+- Islamic Glossary (`app/glossary.tsx`) — 66 Islamic terms across 8 categories (Aqeedah, Fiqh, Quran, Hadith, Seerah, Spirituality, Arabic phrases, General) with Arabic, transliteration, full definition, usage notes, Quranic references; alphabetical grouping, search, category filter
+- Fasting Tracker (`app/fasting-tracker.tsx`) — Log 9 voluntary fast types (Monday, Thursday, Ayyam al-Bid, Dawud, Ashura, Arafah, Shawwal, Dhul Hijjah, Custom); weekly calendar view, stats, hadith for each fast type, recent log with delete
+
+**Quran Files (Completed):**
+- Surah List (`app/(tabs)/quran.tsx`) — Enhanced with "Continue Reading" last-read widget, Meccan/Medinan filter chips, Juz browser button, surah count badge
+- Surah Reader (`app/quran/[surahNumber].tsx`) — **Fully enhanced**: font size control (16–36px), copy ayah to clipboard, share ayah, per-ayah context menu (play/bookmark/copy/share), repeat mode (off/single ayah/full surah), previous/next surah navigation arrows, Juz+Page info per ayah, download button in hero, Reader Settings modal (font size slider + translation/Urdu/Tafsir toggles), last read position saved to AsyncStorage
+- Quran Juz Browser (`app/quran-juz.tsx`) — All 30 Juz with Arabic name, transliteration, surah range, ayah count; grid & list views; tap any Juz to open its first surah
 
 **Home Screen Features:**
 - Hijri date banner (clickable → Islamic Calendar)
 - Daily Verse widget (rotates daily, 14 curated Quran ayahs)
 - Hadith of the Day widget (rotates daily, 14 curated hadiths)
 - Stats row (streak, minutes, lessons)
-- 27 quick-action tiles (Read Quran, Hadith, Books, Learn, Prayer Times, Tasbih, Qibla, Duas, 99 Names, Search Quran, Calendar, Workspace, Zakat, Prayer Log, Islamic Quiz, Adhkar, Hifz Tracker, Ramadan, Salah Guide, History, Arabic Alphabet, Prophets, Wudu, Tajweed, Seerah, Names)
+- 30 quick-action tiles (Read Quran, Hadith, Books, Learn, Prayer Times, Tasbih, Qibla, Duas, 99 Names, Search Quran, Calendar, Workspace, Zakat, Prayer Log, Islamic Quiz, Adhkar, Hifz Tracker, Ramadan, Salah Guide, History, Arabic Alphabet, Prophets, Wudu, Tajweed, Seerah, Names, Quran Juz, Glossary, Fasting)
 - Daily Tools row (Prayer Times, Tasbih, Qibla)
 - Recent Activity list
 
