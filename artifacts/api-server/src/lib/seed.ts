@@ -6,7 +6,7 @@ import {
   learningPathsTable, lessonsTable,
 } from "@workspace/db";
 import bcrypt from "bcryptjs";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { logger } from "./logger";
 
 interface AlquranAyah {
@@ -69,6 +69,116 @@ export async function seedQuranAyahsFromAPI(): Promise<void> {
     logger.info(`Ayahs seeded: ${Math.min(i + BATCH, ayahsToInsert.length)}/${ayahsToInsert.length}`);
   }
   logger.info(`Quran seeding complete — ${ayahsToInsert.length} ayahs stored.`);
+}
+
+interface FawazahmedHadith {
+  hadithnumber: number;
+  text: string;
+  grades: Array<{ grade: string; graded_by?: string }>;
+  reference?: { book?: number; hadith?: number };
+}
+interface FawazahmedResponse {
+  metadata: { name?: string; sections?: Record<string, string>; section_details?: Record<string, unknown> };
+  hadiths: FawazahmedHadith[];
+}
+
+const SAHIH_SITTA: Array<{ id: string; engKey: string; araKey: string; minExpected: number }> = [
+  { id: "bukhari",  engKey: "eng-bukhari",  araKey: "ara-bukhari",  minExpected: 7000 },
+  { id: "muslim",   engKey: "eng-muslim",   araKey: "ara-muslim",   minExpected: 7000 },
+  { id: "abudawud", engKey: "eng-abudawud", araKey: "ara-abudawud", minExpected: 5000 },
+  { id: "tirmidhi", engKey: "eng-tirmidhi", araKey: "ara-tirmidhi", minExpected: 3500 },
+  { id: "nasai",    engKey: "eng-nasai",    araKey: "ara-nasai",    minExpected: 5000 },
+  { id: "ibnmajah", engKey: "eng-ibnmajah", araKey: "ara-ibnmajah", minExpected: 4000 },
+];
+
+export async function seedHadithsFromAPI(): Promise<void> {
+  logger.info("Starting Sahih Sitta (6 collections) seeding from fawazahmed0 CDN...");
+  const CDN = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions";
+
+  for (const col of SAHIH_SITTA) {
+    const [{ cnt }] = await db
+      .select({ cnt: sql<number>`cast(count(*) as integer)` })
+      .from(hadithsTable)
+      .where(eq(hadithsTable.collectionId, col.id));
+
+    if (cnt >= col.minExpected) {
+      logger.info(`${col.id}: already fully seeded (${cnt} hadiths), skipping.`);
+      continue;
+    }
+
+    logger.info(`${col.id}: current=${cnt}, fetching English + Arabic from CDN...`);
+
+    // Delete any partial data to avoid duplicates
+    await db.delete(hadithsTable).where(eq(hadithsTable.collectionId, col.id));
+    await db.delete(hadithBooksTable).where(eq(hadithBooksTable.collectionId, col.id));
+
+    const [engRes, araRes] = await Promise.all([
+      fetch(`${CDN}/${col.engKey}.min.json`),
+      fetch(`${CDN}/${col.araKey}.min.json`),
+    ]);
+
+    if (!engRes.ok || !araRes.ok) {
+      logger.error(`Failed to fetch ${col.id}: eng=${engRes.status} ara=${araRes.status}`);
+      continue;
+    }
+
+    const engData = (await engRes.json()) as FawazahmedResponse;
+    const araData = (await araRes.json()) as FawazahmedResponse;
+
+    // Arabic text lookup by hadithnumber
+    const araMap = new Map<number, string>();
+    for (const h of araData.hadiths) araMap.set(h.hadithnumber, h.text);
+
+    // Section names from metadata
+    const sections = engData.metadata?.sections ?? {};
+
+    // Collect unique books and their hadith counts
+    const bookMap = new Map<number, { name: string; count: number }>();
+    for (const h of engData.hadiths) {
+      const bk = Math.floor(h.reference?.book ?? 1);
+      if (!bookMap.has(bk)) bookMap.set(bk, { name: sections[String(bk)] ?? `Book ${bk}`, count: 0 });
+      bookMap.get(bk)!.count++;
+    }
+
+    // Insert books
+    const bookRows = Array.from(bookMap.entries()).map(([bookNumber, info]) => ({
+      collectionId: col.id,
+      bookNumber,
+      nameEnglish: info.name,
+      nameArabic: info.name,
+      totalHadiths: info.count,
+    }));
+    if (bookRows.length > 0) {
+      for (let i = 0; i < bookRows.length; i += 100) {
+        await db.insert(hadithBooksTable).values(bookRows.slice(i, i + 100));
+      }
+      logger.info(`${col.id}: inserted ${bookRows.length} books.`);
+    }
+
+    // Insert hadiths in batches of 200
+    const colName = engData.metadata?.name ?? col.id;
+    const hadithRows: (typeof hadithsTable.$inferInsert)[] = engData.hadiths.map(h => ({
+      collectionId: col.id,
+      bookNumber: Math.floor(h.reference?.book ?? 1),
+      hadithNumber: Math.floor(h.hadithnumber),
+      arabic: araMap.get(h.hadithnumber) ?? "",
+      english: h.text,
+      grade: h.grades?.[0]?.grade ?? undefined,
+      reference: `${colName} ${h.hadithnumber}`,
+    }));
+
+    const BATCH = 200;
+    for (let i = 0; i < hadithRows.length; i += BATCH) {
+      await db.insert(hadithsTable).values(hadithRows.slice(i, i + BATCH));
+      if ((i % 2000 === 0 && i > 0) || i + BATCH >= hadithRows.length) {
+        logger.info(`${col.id}: ${Math.min(i + BATCH, hadithRows.length)}/${hadithRows.length} hadiths`);
+      }
+    }
+
+    logger.info(`${col.id}: seeding complete (${hadithRows.length} hadiths).`);
+  }
+
+  logger.info("Sahih Sitta — all 6 collections seeded successfully.");
 }
 
 export async function seedIslamicContent() {
@@ -728,6 +838,15 @@ export async function seedIslamicContent() {
     seedQuranAyahsFromAPI().catch(e => logger.error({ err: e }, "Quran ayah background seeding failed"));
   } else {
     logger.info(`Quran ayahs already seeded: ${ayahCount}`);
+  }
+
+  // Sahih Sitta — fetch from fawazahmed0 CDN if fewer than 10000 total hadiths
+  const [{ hadithCount }] = await db.select({ hadithCount: sql<number>`cast(count(*) as integer)` }).from(hadithsTable);
+  if (hadithCount < 10000) {
+    logger.info(`Hadiths in DB: ${hadithCount}. Starting Sahih Sitta background seeding...`);
+    seedHadithsFromAPI().catch(e => logger.error({ err: e }, "Hadith background seeding failed"));
+  } else {
+    logger.info(`Hadiths already seeded: ${hadithCount}`);
   }
 
   // Admin user
