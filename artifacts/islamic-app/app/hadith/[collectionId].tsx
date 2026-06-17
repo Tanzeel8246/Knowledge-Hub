@@ -13,6 +13,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetHadithBooks, useGetHadithCollections } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
 export default function HadithCollectionScreen() {
   const colors = useColors();
@@ -21,6 +22,10 @@ export default function HadithCollectionScreen() {
   const { data: books, isLoading } = useGetHadithBooks(collectionId);
   const { data: collections } = useGetHadithCollections();
   const collection = collections?.find(c => c.id === collectionId);
+  const { downloadHadithCollection, deleteDownload, getStatus, getProgress, getCollectionKey } = useOfflineDownload();
+  const colKey = getCollectionKey(collectionId ?? "");
+  const offlineStatus = getStatus(colKey);
+  const offlineProg = getProgress(colKey);
 
   const s = makeStyles(colors);
 
@@ -34,7 +39,36 @@ export default function HadithCollectionScreen() {
           <Text style={[s.title, { color: colors.foreground }]} numberOfLines={1}>{collection?.name ?? collectionId}</Text>
           {collection?.nameArabic && <Text style={[s.arabic, { color: colors.gold }]}>{collection.nameArabic}</Text>}
         </View>
+        <TouchableOpacity
+          style={[s.offlineBtn, {
+            backgroundColor: offlineStatus === "done" ? "#16A34A20" : colors.primary + "15",
+            borderColor: offlineStatus === "done" ? "#16A34A40" : colors.primary + "30",
+          }]}
+          onPress={() => {
+            if (offlineStatus === "done") {
+              deleteDownload(colKey);
+            } else if (offlineStatus !== "downloading" && collectionId) {
+              downloadHadithCollection(collectionId, collection?.name ?? collectionId, collection?.nameArabic ?? undefined);
+            }
+          }}
+        >
+          {offlineStatus === "downloading" ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : offlineStatus === "done" ? (
+            <Feather name="check-circle" size={16} color="#16A34A" />
+          ) : (
+            <Feather name="download" size={16} color={colors.primary} />
+          )}
+          <Text style={[s.offlineBtnText, { color: offlineStatus === "done" ? "#16A34A" : colors.primary }]}>
+            {offlineStatus === "done" ? "Offline" : "Save"}
+          </Text>
+        </TouchableOpacity>
       </View>
+      {offlineStatus === "downloading" && (
+        <View style={[s.progressBar, { backgroundColor: colors.border }]}>
+          <View style={[s.progressFill, { width: `${Math.round(offlineProg * 100)}%` as any, backgroundColor: colors.primary }]} />
+        </View>
+      )}
 
       {isLoading ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
@@ -87,5 +121,9 @@ function makeStyles(colors: any) {
     bookCount: { fontSize: 12, fontFamily: "Inter_400Regular" },
     empty: { alignItems: "center", marginTop: 60 },
     emptyText: { fontSize: 15, fontFamily: "Inter_400Regular" },
+    offlineBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+    offlineBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+    progressBar: { height: 3, overflow: "hidden" },
+    progressFill: { height: "100%", borderRadius: 2 },
   });
 }

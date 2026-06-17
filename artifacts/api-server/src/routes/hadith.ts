@@ -69,6 +69,28 @@ router.get("/hadith/search", async (req, res) => {
   res.json({ results, total, page, totalPages: Math.ceil(total / limit) });
 });
 
+router.get("/hadith/collections/:collectionId/download", async (req, res) => {
+  const parsed = GetHadithBooksParams.safeParse({ collectionId: req.params.collectionId });
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid parameters" });
+    return;
+  }
+  const { collectionId } = parsed.data;
+  const [collection] = await db.select().from(hadithCollectionsTable)
+    .where(eq(hadithCollectionsTable.id, collectionId)).limit(1);
+  if (!collection) {
+    res.status(404).json({ message: "Collection not found" });
+    return;
+  }
+  const books = await db.select().from(hadithBooksTable)
+    .where(eq(hadithBooksTable.collectionId, collectionId))
+    .orderBy(hadithBooksTable.bookNumber);
+  const hadiths = await db.select().from(hadithsTable)
+    .where(eq(hadithsTable.collectionId, collectionId))
+    .orderBy(hadithsTable.hadithNumber);
+  res.json({ collection, books, hadiths });
+});
+
 router.get("/hadith/:id", async (req, res) => {
   const parsed = GetHadithParams.safeParse({ id: req.params.id });
   if (!parsed.success) {

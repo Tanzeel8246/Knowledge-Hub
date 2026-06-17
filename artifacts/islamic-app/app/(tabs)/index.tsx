@@ -131,6 +131,7 @@ export default function HomeScreen() {
     { icon: "layers", label: "Quran Juz", route: "/quran-juz", color: "#059669", isMCIcon: false },
     { icon: "book-alphabet", label: "Glossary", route: "/glossary", color: "#7C3AED" },
     { icon: "food-off", label: "Fasting", route: "/fasting-tracker", color: "#0891B2" },
+    { icon: "download", label: "Downloads", route: "/downloads", color: "#16A34A" },
   ];
 
   return (

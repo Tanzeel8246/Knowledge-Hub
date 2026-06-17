@@ -10,7 +10,6 @@ import {
   Alert,
   Modal,
   ScrollView,
-  Linking,
   Share,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -24,6 +23,7 @@ import { useColors } from "@/hooks/useColors";
 import { useQueryClient } from "@tanstack/react-query";
 import { RECITERS, getAudioUrl, DEFAULT_RECITER, type Reciter } from "@/constants/reciters";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
 const LAST_READ_KEY = "quran_last_read_v1";
 const FONT_SIZE_KEY = "quran_font_size_v1";
@@ -46,7 +46,8 @@ export default function SurahReaderScreen() {
   const insets = useSafeAreaInsets();
   const { surahNumber } = useLocalSearchParams<{ surahNumber: string }>();
   const surahNum = Number(surahNumber);
-  const { data: surah, isLoading } = useGetSurah(surahNum);
+  const { data: apiSurah, isLoading: apiLoading } = useGetSurah(surahNum);
+  const [offlineChecked, setOfflineChecked] = useState(false);
   const createBookmark = useCreateBookmark();
   const queryClient = useQueryClient();
 
@@ -70,6 +71,13 @@ export default function SurahReaderScreen() {
   const [showAyahMenu, setShowAyahMenu] = useState<AyahItem | null>(null);
 
   const [downloading, setDownloading] = useState(false);
+  const [offlineSurah, setOfflineSurah] = useState<typeof apiSurah | null>(null);
+  const { getSurahOffline, downloadSurah, deleteDownload, getStatus, getSurahKey } = useOfflineDownload();
+
+  const surah = offlineSurah ?? apiSurah;
+  const isLoading = !offlineChecked || (!offlineSurah && apiLoading);
+  const surahOfflineKey = getSurahKey(surahNum);
+  const offlineStatus = getStatus(surahOfflineKey);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const s = makeStyles(colors, arabicFontSize, translationFontSize);
@@ -106,6 +114,13 @@ export default function SurahReaderScreen() {
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
     return () => { soundRef.current?.unloadAsync(); };
   }, []);
+
+  useEffect(() => {
+    getSurahOffline<typeof apiSurah>(surahNum).then(data => {
+      if (data) setOfflineSurah(data);
+      setOfflineChecked(true);
+    });
+  }, [surahNum]);
 
   const playAyah = useCallback(async (index: number) => {
     if (!surah?.ayahs) return;
@@ -187,13 +202,22 @@ export default function SurahReaderScreen() {
     setSelectedReciter(reciter);
   }, []);
 
-  const handleDownload = useCallback(async () => {
-    const surahPadded = String(surahNum).padStart(3, "0");
-    const url = `https://download.quranicaudio.com/qdc/mishari_al_afasy/murattal/${surahPadded}.mp3`;
-    setDownloading(true);
-    await Linking.openURL(url);
-    setDownloading(false);
-  }, [surahNum]);
+  const handleToggleOffline = useCallback(async () => {
+    if (offlineStatus === "done") {
+      Alert.alert(
+        "Delete Offline Copy",
+        `Remove ${surah?.nameTransliteration} from offline storage?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => { deleteDownload(surahOfflineKey); setOfflineSurah(null); } },
+        ]
+      );
+    } else if (offlineStatus !== "downloading" && surah) {
+      setDownloading(true);
+      await downloadSurah(surahNum, surah.nameTransliteration, surah.nameArabic);
+      setDownloading(false);
+    }
+  }, [offlineStatus, surah, surahNum, surahOfflineKey, downloadSurah, deleteDownload]);
 
   const handleBookmark = async (ayah: AyahItem) => {
     try {
@@ -266,7 +290,10 @@ export default function SurahReaderScreen() {
         </TouchableOpacity>
         <View style={s.headerCenter}>
           <Text style={[s.headerTitle, { color: colors.foreground }]}>{surah.nameTransliteration}</Text>
-          <Text style={[s.headerSub, { color: colors.mutedForeground }]}>{surah.totalAyahs} ayahs · {surah.revelationType}</Text>
+          <Text style={[s.headerSub, { color: colors.mutedForeground }]}>
+          {surah.totalAyahs} ayahs · {surah.revelationType}
+          {offlineStatus === "done" ? "  ·  🟢 Offline" : ""}
+        </Text>
         </View>
         <View style={s.headerActions}>
           {/* Surah nav arrows */}
@@ -322,9 +349,20 @@ export default function SurahReaderScreen() {
                 <Feather name="play" size={16} color="#FFF" />
                 <Text style={s.startBtnText}>Play Surah</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.downloadBtn, { borderColor: "#FFFFFF40" }]} onPress={handleDownload}>
-                {downloading ? <ActivityIndicator size="small" color="#FFF" /> : <Feather name="download" size={16} color="#FFF" />}
-                <Text style={s.downloadBtnText}>Download</Text>
+              <TouchableOpacity
+                style={[s.downloadBtn, { borderColor: offlineStatus === "done" ? "#16A34A" : "#FFFFFF40" }]}
+                onPress={handleToggleOffline}
+              >
+                {downloading || offlineStatus === "downloading" ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : offlineStatus === "done" ? (
+                  <Feather name="check-circle" size={16} color="#16A34A" />
+                ) : (
+                  <Feather name="download" size={16} color="#FFF" />
+                )}
+                <Text style={[s.downloadBtnText, offlineStatus === "done" && { color: "#16A34A" }]}>
+                  {offlineStatus === "done" ? "Saved" : "Save Offline"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

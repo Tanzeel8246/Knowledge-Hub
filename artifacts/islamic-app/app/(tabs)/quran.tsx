@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGetSurahs } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
 const LAST_READ_KEY = "quran_last_read_v1";
 
@@ -37,6 +38,7 @@ export default function QuranScreen() {
   const [filter, setFilter] = useState<"all" | "Meccan" | "Medinan">("all");
   const [lastRead, setLastRead] = useState<LastRead | null>(null);
   const { data: surahs, isLoading } = useGetSurahs();
+  const { isDownloaded, getStatus, getProgress, downloadSurah, getSurahKey } = useOfflineDownload();
 
   useEffect(() => {
     AsyncStorage.getItem(LAST_READ_KEY).then(val => {
@@ -79,6 +81,13 @@ export default function QuranScreen() {
             >
               <Feather name="mic" size={16} color={colors.gold} />
               <Text style={[s.iconBtnText, { color: colors.gold }]}>Reciters</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.iconBtn, { backgroundColor: "#16A34A20", borderColor: "#16A34A40" }]}
+              onPress={() => router.push("/downloads" as any)}
+            >
+              <Feather name="download" size={16} color="#16A34A" />
+              <Text style={[s.iconBtnText, { color: "#16A34A" }]}>Offline</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -159,14 +168,19 @@ export default function QuranScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
             const revColor = REVELATION_COLORS[item.revelationType] ?? colors.primary;
+            const key = getSurahKey(item.number);
+            const dlStatus = getStatus(key);
+            const dlProg = getProgress(key);
+            const isOffline = dlStatus === "done";
+            const isDling = dlStatus === "downloading";
             return (
               <TouchableOpacity
-                style={[s.surahItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+                style={[s.surahItem, { backgroundColor: colors.card, borderColor: isOffline ? "#16A34A30" : colors.border }]}
                 onPress={() => router.push(`/quran/${item.number}` as any)}
                 activeOpacity={0.8}
               >
-                <View style={[s.numberBadge, { backgroundColor: colors.primary + "15" }]}>
-                  <Text style={[s.number, { color: colors.primary }]}>{item.number}</Text>
+                <View style={[s.numberBadge, { backgroundColor: isOffline ? "#16A34A15" : colors.primary + "15" }]}>
+                  <Text style={[s.number, { color: isOffline ? "#16A34A" : colors.primary }]}>{item.number}</Text>
                 </View>
                 <View style={s.info}>
                   <Text style={[s.name, { color: colors.foreground }]}>{item.nameTransliteration}</Text>
@@ -178,10 +192,32 @@ export default function QuranScreen() {
                     <View style={[s.revChip, { backgroundColor: revColor + "15" }]}>
                       <Text style={[s.revChipText, { color: revColor }]}>{item.revelationType}</Text>
                     </View>
+                    {isOffline && (
+                      <View style={[s.revChip, { backgroundColor: "#16A34A15" }]}>
+                        <Text style={[s.revChipText, { color: "#16A34A" }]}>Offline</Text>
+                      </View>
+                    )}
                   </View>
+                  {isDling && (
+                    <View style={[s.dlBar, { backgroundColor: colors.border }]}>
+                      <View style={[s.dlFill, { width: `${Math.round(dlProg * 100)}%` as any, backgroundColor: colors.primary }]} />
+                    </View>
+                  )}
                 </View>
                 <View style={s.right}>
                   <Text style={[s.arabic, { color: colors.gold }]}>{item.nameArabic}</Text>
+                  <TouchableOpacity
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    onPress={e => { e.stopPropagation(); if (!isOffline && !isDling) downloadSurah(item.number, item.nameTransliteration, item.nameArabic); }}
+                  >
+                    {isDling ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : isOffline ? (
+                      <Feather name="check-circle" size={16} color="#16A34A" />
+                    ) : (
+                      <Feather name="download" size={16} color={colors.mutedForeground} />
+                    )}
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             );
@@ -224,6 +260,8 @@ function makeStyles(colors: any) {
     filterChipText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
     countLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
 
+    dlBar: { height: 3, borderRadius: 2, marginTop: 4, overflow: "hidden" },
+    dlFill: { height: "100%", borderRadius: 2 },
     surahItem: { flexDirection: "row", alignItems: "center", borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, gap: 12 },
     numberBadge: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
     number: { fontSize: 15, fontFamily: "Inter_700Bold" },
