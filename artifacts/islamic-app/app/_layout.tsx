@@ -16,6 +16,12 @@ import { setBaseUrl } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { useBackgroundSync } from "@/hooks/useBackgroundSync";
+
+function BackgroundSyncMounter() {
+  useBackgroundSync();
+  return null;
+}
 
 setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 
@@ -101,6 +107,7 @@ export default function RootLayout() {
           <AuthProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
+                <BackgroundSyncMounter />
                 <RootLayoutNav />
               </KeyboardProvider>
             </GestureHandlerRootView>

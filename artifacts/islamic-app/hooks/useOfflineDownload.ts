@@ -3,11 +3,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useState, useEffect, useCallback } from "react";
 
 const OFFLINE_DIR = `${FileSystem.documentDirectory}offline/`;
-const INDEX_KEY = "offline_index_v2";
+export const INDEX_KEY = "offline_index_v2";
+export const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 
 export type DownloadItemType = "quran_surah" | "hadith_collection";
-export type DownloadStatus = "idle" | "downloading" | "done" | "error";
+export type DownloadStatus = "idle" | "downloading" | "syncing" | "done" | "error";
 
 export interface DownloadRecord {
   key: string;
@@ -16,6 +17,7 @@ export interface DownloadRecord {
   labelAr?: string;
   sizeBytes?: number;
   downloadedAt: number;
+  lastSynced: number;
 }
 
 export function useOfflineDownload() {
@@ -75,8 +77,12 @@ export function useOfflineDownload() {
       const info = await FileSystem.getInfoAsync(path) as any;
       setItemProgress(key, 1);
       setItemStatus(key, "done");
+      const now = Date.now();
       const base = currentIndex ?? index;
-      const newIdx = { ...base, [key]: { key, type: "quran_surah" as const, label, labelAr, sizeBytes: info.size ?? json.length, downloadedAt: Date.now() } };
+      const newIdx = {
+        ...base,
+        [key]: { key, type: "quran_surah" as const, label, labelAr, sizeBytes: info.size ?? json.length, downloadedAt: base[key]?.downloadedAt ?? now, lastSynced: now },
+      };
       await saveIndex(newIdx);
       return newIdx;
     } catch {
@@ -107,12 +113,63 @@ export function useOfflineDownload() {
       const info = await FileSystem.getInfoAsync(path) as any;
       setItemProgress(key, 1);
       setItemStatus(key, "done");
-      const newIdx = { ...index, [key]: { key, type: "hadith_collection" as const, label, labelAr, sizeBytes: info.size ?? json.length, downloadedAt: Date.now() } };
+      const now = Date.now();
+      const newIdx = {
+        ...index,
+        [key]: { key, type: "hadith_collection" as const, label, labelAr, sizeBytes: info.size ?? json.length, downloadedAt: index[key]?.downloadedAt ?? now, lastSynced: now },
+      };
       await saveIndex(newIdx);
     } catch {
       setItemStatus(key, "error");
     }
   }, [index]);
+
+  const syncItem = useCallback(async (key: string) => {
+    const rec = index[key];
+    if (!rec) return;
+    setItemStatus(key, "syncing");
+    setItemProgress(key, 0);
+    try {
+      await ensureDir();
+      let url = "";
+      if (rec.type === "quran_surah") {
+        const num = key.replace("quran_surah_", "");
+        url = `${BASE_URL}/api/quran/surahs/${num}`;
+      } else if (rec.type === "hadith_collection") {
+        const id = key.replace("hadith_collection_", "");
+        url = `${BASE_URL}/api/hadith/collections/${id}/download`;
+      }
+      setItemProgress(key, 0.2);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("fetch failed");
+      setItemProgress(key, 0.6);
+      const data = await res.json();
+      const json = JSON.stringify(data);
+      setItemProgress(key, 0.9);
+      const path = `${OFFLINE_DIR}${key}.json`;
+      await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
+      const info = await FileSystem.getInfoAsync(path) as any;
+      setItemProgress(key, 1);
+      setItemStatus(key, "done");
+      const now = Date.now();
+      const newIdx = { ...index, [key]: { ...rec, sizeBytes: info.size ?? json.length, lastSynced: now } };
+      await saveIndex(newIdx);
+    } catch {
+      setItemStatus(key, "error");
+    }
+  }, [index]);
+
+  const syncAllStale = useCallback(async (threshold = STALE_THRESHOLD_MS) => {
+    const staleKeys = Object.keys(index).filter(key => {
+      const rec = index[key];
+      const lastSynced = rec.lastSynced ?? rec.downloadedAt;
+      return Date.now() - lastSynced > threshold;
+    });
+    for (const key of staleKeys) {
+      await syncItem(key);
+    }
+    return staleKeys.length;
+  }, [index, syncItem]);
 
   const deleteDownload = useCallback(async (key: string) => {
     try {
@@ -138,6 +195,11 @@ export function useOfflineDownload() {
   }
 
   function isDownloaded(key: string) { return key in index; }
+  function isStale(key: string, threshold = STALE_THRESHOLD_MS) {
+    const rec = index[key];
+    if (!rec) return false;
+    return Date.now() - (rec.lastSynced ?? rec.downloadedAt) > threshold;
+  }
   function getStatus(key: string): DownloadStatus { return statuses[key] ?? (isDownloaded(key) ? "done" : "idle"); }
   function getProgress(key: string) { return progress[key] ?? 0; }
   function getSurahKey(n: number) { return `quran_surah_${n}`; }
@@ -145,6 +207,7 @@ export function useOfflineDownload() {
   function getSurahOffline<T>(n: number) { return readOfflineFile<T>(getSurahKey(n)); }
   function getHadithCollectionOffline<T>(id: string) { return readOfflineFile<T>(getCollectionKey(id)); }
 
+  const staleCount = Object.keys(index).filter(k => isStale(k)).length;
   const totalBytes = Object.values(index).reduce((s, r) => s + (r.sizeBytes ?? 0), 0);
   const downloadedCount = Object.keys(index).length;
 
@@ -152,12 +215,16 @@ export function useOfflineDownload() {
     index,
     totalBytes,
     downloadedCount,
+    staleCount,
     downloadSurah,
     downloadHadithCollection,
+    syncItem,
+    syncAllStale,
     deleteDownload,
     getSurahOffline,
     getHadithCollectionOffline,
     isDownloaded,
+    isStale,
     getStatus,
     getProgress,
     getSurahKey,
