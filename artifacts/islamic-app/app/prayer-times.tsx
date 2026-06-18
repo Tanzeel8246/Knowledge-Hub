@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -7,38 +7,21 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  TextInput,
+  FlatList,
   Alert,
+  Switch,
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { useColors } from "@/hooks/useColors";
+import { usePrayerNotifications, PRAYER_KEYS, PrayerKey } from "@/hooks/usePrayerNotifications";
 import { Coordinates, CalculationMethod, PrayerTimes, Madhab, SunnahTimes } from "adhan";
 
-const PRAYER_NAMES: Record<string, { name: string; arabic: string; icon: string }> = {
-  fajr: { name: "Fajr", arabic: "الفجر", icon: "sunrise" },
-  sunrise: { name: "Sunrise", arabic: "الشروق", icon: "sun" },
-  dhuhr: { name: "Dhuhr", arabic: "الظهر", icon: "sun" },
-  asr: { name: "Asr", arabic: "العصر", icon: "sunset" },
-  maghrib: { name: "Maghrib", arabic: "المغرب", icon: "sunset" },
-  isha: { name: "Isha", arabic: "العشاء", icon: "moon" },
-};
-
-const METHODS = [
-  { id: "MuslimWorldLeague", label: "Muslim World League" },
-  { id: "Egyptian", label: "Egyptian Authority" },
-  { id: "Karachi", label: "University of Islamic Sciences, Karachi" },
-  { id: "UmmAlQura", label: "Umm Al-Qura, Makkah" },
-  { id: "Dubai", label: "Dubai" },
-  { id: "MoonsightingCommittee", label: "Moonsighting Committee" },
-  { id: "NorthAmerica", label: "Islamic Society of North America" },
-  { id: "Kuwait", label: "Kuwait" },
-  { id: "Qatar", label: "Qatar" },
-  { id: "Singapore", label: "Singapore" },
-  { id: "Turkey", label: "Turkey" },
-  { id: "Tehran", label: "Institute of Geophysics, Tehran" },
-];
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PrayerEntry {
   key: string;
@@ -48,118 +31,231 @@ interface PrayerEntry {
   time: Date;
 }
 
-function formatTime(date: Date): string {
+interface CityResult {
+  id: number;
+  name: string;
+  country: string;
+  admin1?: string;
+  latitude: number;
+  longitude: number;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PRAYER_META: Record<string, { name: string; arabic: string; icon: string; notifKey?: PrayerKey }> = {
+  fajr:    { name: "Fajr",    arabic: "الفجر",    icon: "sunrise",  notifKey: "fajr"    },
+  sunrise: { name: "Sunrise", arabic: "الشروق",   icon: "sun"                            },
+  dhuhr:   { name: "Dhuhr",   arabic: "الظهر",    icon: "sun",      notifKey: "dhuhr"   },
+  asr:     { name: "Asr",     arabic: "العصر",    icon: "sunset",   notifKey: "asr"     },
+  maghrib: { name: "Maghrib", arabic: "المغرب",   icon: "sunset",   notifKey: "maghrib" },
+  isha:    { name: "Isha",    arabic: "العشاء",   icon: "moon",     notifKey: "isha"    },
+};
+
+const METHODS = [
+  { id: "MuslimWorldLeague",     label: "Muslim World League"                       },
+  { id: "Egyptian",             label: "Egyptian Authority"                         },
+  { id: "Karachi",              label: "Univ. of Islamic Sciences, Karachi"         },
+  { id: "UmmAlQura",            label: "Umm Al-Qura, Makkah"                       },
+  { id: "Dubai",                label: "Dubai"                                      },
+  { id: "MoonsightingCommittee",label: "Moonsighting Committee"                     },
+  { id: "NorthAmerica",         label: "Islamic Society of North America"           },
+  { id: "Kuwait",               label: "Kuwait"                                     },
+  { id: "Qatar",                label: "Qatar"                                      },
+  { id: "Singapore",            label: "Singapore"                                  },
+  { id: "Turkey",               label: "Turkey"                                     },
+  { id: "Tehran",               label: "Institute of Geophysics, Tehran"            },
+];
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmt12(date: Date): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtShort(date: Date): string {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function formatCountdown(ms: number): string {
   if (ms <= 0) return "Now";
-  const totalSecs = Math.floor(ms / 1000);
-  const h = Math.floor(totalSecs / 3600);
-  const m = Math.floor((totalSecs % 3600) / 60);
-  const s = totalSecs % 60;
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
   if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }
 
 function getIslamicDate(): string {
   try {
-    return new Date().toLocaleDateString("en-US-u-ca-islamic", {
-      year: "numeric", month: "long", day: "numeric",
-    });
-  } catch {
-    return "";
-  }
+    return new Date().toLocaleDateString("en-US-u-ca-islamic", { year: "numeric", month: "long", day: "numeric" });
+  } catch { return ""; }
 }
+
+function buildPrayerList(lat: number, lng: number, methodId: string, date?: Date): PrayerEntry[] {
+  const coords = new Coordinates(lat, lng);
+  const params = (CalculationMethod as any)[methodId]?.() ?? CalculationMethod.MuslimWorldLeague();
+  params.madhab = Madhab.Shafi;
+  const d = date ?? new Date();
+  const pt = new PrayerTimes(coords, d, params);
+  return [
+    { key: "fajr",    time: pt.fajr,    ...PRAYER_META.fajr    },
+    { key: "sunrise", time: pt.sunrise, ...PRAYER_META.sunrise  },
+    { key: "dhuhr",   time: pt.dhuhr,   ...PRAYER_META.dhuhr   },
+    { key: "asr",     time: pt.asr,     ...PRAYER_META.asr      },
+    { key: "maghrib", time: pt.maghrib, ...PRAYER_META.maghrib  },
+    { key: "isha",    time: pt.isha,    ...PRAYER_META.isha      },
+  ];
+}
+
+function buildWeeklyTable(lat: number, lng: number, methodId: string) {
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const list = buildPrayerList(lat, lng, methodId, d);
+    const byKey: Record<string, Date> = {};
+    list.forEach(p => { byKey[p.key] = p.time; });
+    return { date: d, prayers: byKey };
+  });
+}
+
+// ─── City search via open-meteo (free, no API key) ───────────────────────────
+
+async function searchCities(query: string): Promise<CityResult[]> {
+  if (query.trim().length < 2) return [];
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en&format=json`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.results ?? [];
+  } catch { return []; }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PrayerTimesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const notif = usePrayerNotifications();
+
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [location, setLocation] = useState<{ lat: number; lng: number; city?: string } | null>(null);
+  const [location, setLocation] = useState<{ lat: number; lng: number; city: string } | null>(null);
   const [prayers, setPrayers] = useState<PrayerEntry[]>([]);
   const [nextPrayer, setNextPrayer] = useState<PrayerEntry | null>(null);
   const [countdown, setCountdown] = useState("");
   const [method, setMethod] = useState("MuslimWorldLeague");
   const [showMethods, setShowMethods] = useState(false);
+  const [tab, setTab] = useState<"today" | "week" | "settings">("today");
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  const calculatePrayers = useCallback((lat: number, lng: number, methodId: string) => {
-    const coords = new Coordinates(lat, lng);
-    const params = (CalculationMethod as any)[methodId]?.() ?? CalculationMethod.MuslimWorldLeague();
-    params.madhab = Madhab.Shafi;
-    const date = new Date();
-    const pt = new PrayerTimes(coords, date, params);
-    const sunnahTimes = new SunnahTimes(pt);
+  // City search
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setCityResults] = useState<CityResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const list: PrayerEntry[] = [
-      { key: "fajr", time: pt.fajr, ...PRAYER_NAMES.fajr },
-      { key: "sunrise", time: pt.sunrise, ...PRAYER_NAMES.sunrise },
-      { key: "dhuhr", time: pt.dhuhr, ...PRAYER_NAMES.dhuhr },
-      { key: "asr", time: pt.asr, ...PRAYER_NAMES.asr },
-      { key: "maghrib", time: pt.maghrib, ...PRAYER_NAMES.maghrib },
-      { key: "isha", time: pt.isha, ...PRAYER_NAMES.isha },
-    ];
-    setPrayers(list);
-    return list;
-  }, []);
+  // Weekly
+  const [weeklyData, setWeeklyData] = useState<{ date: Date; prayers: Record<string, Date> }[]>([]);
 
-  const updateNextPrayer = useCallback((prayerList: PrayerEntry[]) => {
+  const updateNextPrayer = useCallback((list: PrayerEntry[]) => {
     const now = new Date();
-    const next = prayerList.find(p => p.time > now) ?? prayerList[0];
+    const next = list.find(p => p.time > now) ?? list[0];
     setNextPrayer(next);
     const diff = next.time.getTime() - now.getTime();
     setCountdown(formatCountdown(diff < 0 ? 0 : diff));
   }, []);
 
-  const loadLocation = useCallback(async (chosenMethod?: string) => {
+  const applyLocation = useCallback((lat: number, lng: number, city: string, chosenMethod?: string) => {
+    const m = chosenMethod ?? method;
+    const list = buildPrayerList(lat, lng, m);
+    setPrayers(list);
+    updateNextPrayer(list);
+    setLocation({ lat, lng, city });
+    const weekly = buildWeeklyTable(lat, lng, m);
+    setWeeklyData(weekly);
+    // Schedule notifications with new times
+    const timesMap: Record<string, Date> = {};
+    list.forEach(p => { timesMap[p.key] = p.time; });
+    notif.scheduleNotifications(timesMap);
+  }, [method, updateNextPrayer, notif.scheduleNotifications]);
+
+  const loadAutoLocation = useCallback(async (chosenMethod?: string) => {
     setLoading(true);
-    setError(null);
     try {
       if (Platform.OS !== "web") {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          throw new Error("Location permission denied. Using default (Makkah).");
-        }
+        if (status !== "granted") throw new Error("denied");
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const [geocode] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-        const city = geocode?.city ?? geocode?.region ?? "Your Location";
-        const lat = loc.coords.latitude;
-        const lng = loc.coords.longitude;
-        setLocation({ lat, lng, city });
-        const list = calculatePrayers(lat, lng, chosenMethod ?? method);
-        updateNextPrayer(list);
+        const [geo] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        const city = [geo?.city, geo?.region, geo?.country].filter(Boolean).join(", ");
+        applyLocation(loc.coords.latitude, loc.coords.longitude, city || "Your Location", chosenMethod);
       } else {
-        // Default to Makkah on web
-        const lat = 21.3891;
-        const lng = 39.8579;
-        setLocation({ lat, lng, city: "Makkah al-Mukarramah" });
-        const list = calculatePrayers(lat, lng, chosenMethod ?? method);
-        updateNextPrayer(list);
+        applyLocation(21.3891, 39.8579, "Makkah al-Mukarramah", chosenMethod);
       }
-    } catch (e: any) {
-      const lat = 21.3891;
-      const lng = 39.8579;
-      setLocation({ lat, lng, city: "Makkah al-Mukarramah (default)" });
-      const list = calculatePrayers(lat, lng, chosenMethod ?? method);
-      updateNextPrayer(list);
+    } catch {
+      applyLocation(21.3891, 39.8579, "Makkah al-Mukarramah (default)", chosenMethod);
     } finally {
       setLoading(false);
     }
-  }, [calculatePrayers, updateNextPrayer, method]);
+  }, [applyLocation]);
 
-  useEffect(() => { loadLocation(); }, []);
+  useEffect(() => { loadAutoLocation(); }, []);
 
+  // Countdown ticker
   useEffect(() => {
     if (prayers.length === 0) return;
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       setCurrentTime(new Date());
       updateNextPrayer(prayers);
     }, 1000);
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [prayers, updateNextPrayer]);
+
+  // City search debounce
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (q.trim().length < 2) { setCityResults([]); return; }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      const results = await searchCities(q);
+      setCityResults(results);
+      setSearching(false);
+    }, 400);
+  };
+
+  const handleSelectCity = (city: CityResult) => {
+    const label = [city.name, city.admin1, city.country].filter(Boolean).join(", ");
+    setShowSearch(false);
+    setSearchQuery("");
+    setCityResults([]);
+    setLoading(true);
+    applyLocation(city.latitude, city.longitude, label);
+    setLoading(false);
+  };
+
+  const handleToggleNotif = async (key: PrayerKey) => {
+    const ok = await notif.togglePrayer(key);
+    if (!ok) Alert.alert("Permission Required", "Please allow notifications in your device settings to receive prayer alerts.");
+    // Re-schedule with updated prefs
+    if (location) {
+      const timesMap: Record<string, Date> = {};
+      prayers.forEach(p => { timesMap[p.key] = p.time; });
+      await notif.scheduleNotifications(timesMap);
+    }
+  };
+
+  const handleMethodChange = (id: string) => {
+    setMethod(id);
+    setShowMethods(false);
+    if (location) applyLocation(location.lat, location.lng, location.city, id);
+  };
 
   const s = makeStyles(colors);
   const islamicDate = getIslamicDate();
@@ -167,7 +263,8 @@ export default function PrayerTimesScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), backgroundColor: colors.navy }]}>
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={22} color="#FFF" />
@@ -176,23 +273,85 @@ export default function PrayerTimesScreen() {
           <Text style={s.headerTitle}>Prayer Times</Text>
           <Text style={s.headerSubtitle}>مواقيت الصلاة</Text>
         </View>
-        <TouchableOpacity onPress={() => loadLocation()}>
-          <Feather name="refresh-cw" size={20} color="#FFFFFF90" />
+        <TouchableOpacity onPress={() => setShowSearch(v => !v)} style={s.headerBtn}>
+          <Feather name="search" size={20} color="#FFFFFF90" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => loadAutoLocation()} style={s.headerBtn}>
+          <Feather name="navigation" size={20} color="#FFFFFF90" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-      >
-        {/* Date Card */}
+      {/* ── City Search Overlay ─────────────────────────────────────────── */}
+      {showSearch && (
+        <View style={[s.searchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[s.searchRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Feather name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              style={[s.searchInput, { color: colors.foreground }]}
+              placeholder="Search city worldwide…"
+              placeholderTextColor={colors.mutedForeground}
+              value={searchQuery}
+              onChangeText={handleSearchChange}
+              autoFocus
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => { setSearchQuery(""); setCityResults([]); }}>
+                <Feather name="x" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {searching && <ActivityIndicator size="small" color={colors.primary} style={{ margin: 12 }} />}
+          {searchResults.length > 0 && (
+            <FlatList
+              data={searchResults}
+              keyExtractor={i => String(i.id)}
+              style={{ maxHeight: 260 }}
+              keyboardShouldPersistTaps="always"
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[s.cityResult, { borderBottomColor: colors.border }]}
+                  onPress={() => handleSelectCity(item)}
+                >
+                  <MaterialCommunityIcons name="city-variant-outline" size={16} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.cityName, { color: colors.foreground }]}>{item.name}</Text>
+                    <Text style={[s.cityMeta, { color: colors.mutedForeground }]}>
+                      {[item.admin1, item.country].filter(Boolean).join(", ")}
+                    </Text>
+                  </View>
+                  <Text style={[s.cityCoord, { color: colors.mutedForeground }]}>
+                    {item.latitude.toFixed(1)}°, {item.longitude.toFixed(1)}°
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+          {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
+            <Text style={[s.noResults, { color: colors.mutedForeground }]}>No cities found</Text>
+          )}
+        </View>
+      )}
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
+
+        {/* ── Date + Location Banner ──────────────────────────────────────── */}
         <View style={[s.dateCard, { backgroundColor: colors.navy }]}>
           <Text style={s.islamicDate}>{islamicDate}</Text>
           <Text style={s.gregorianDate}>{gregorianDate}</Text>
           {location && (
-            <View style={s.locationRow}>
+            <TouchableOpacity style={s.locationRow} onPress={() => setShowSearch(true)}>
               <Feather name="map-pin" size={12} color="#FFFFFF70" />
-              <Text style={s.locationText}>{location.city}</Text>
+              <Text style={s.locationText} numberOfLines={1}>{location.city}</Text>
+              <Feather name="chevron-down" size={11} color="#FFFFFF50" />
+            </TouchableOpacity>
+          )}
+          {notif.enabledCount > 0 && (
+            <View style={s.notifBadge}>
+              <Feather name="bell" size={11} color={colors.gold} />
+              <Text style={[s.notifBadgeText, { color: colors.gold }]}>
+                {notif.enabledCount} prayer{notif.enabledCount > 1 ? "s" : ""} — notifications on
+              </Text>
             </View>
           )}
         </View>
@@ -200,14 +359,12 @@ export default function PrayerTimesScreen() {
         {loading ? (
           <View style={{ padding: 60, alignItems: "center" }}>
             <ActivityIndicator color={colors.primary} size="large" />
-            <Text style={[{ color: colors.mutedForeground, marginTop: 12, fontFamily: "Inter_400Regular" }]}>
-              Getting prayer times...
-            </Text>
+            <Text style={[s.loadingText, { color: colors.mutedForeground }]}>Getting prayer times…</Text>
           </View>
         ) : (
           <>
-            {/* Next Prayer Highlight */}
-            {nextPrayer && (
+            {/* ── Next Prayer Card ──────────────────────────────────────── */}
+            {nextPrayer && tab === "today" && (
               <View style={[s.nextCard, { backgroundColor: colors.primary }]}>
                 <View>
                   <Text style={s.nextLabel}>Next Prayer</Text>
@@ -215,7 +372,7 @@ export default function PrayerTimesScreen() {
                   <Text style={s.nextArabic}>{nextPrayer.arabic}</Text>
                 </View>
                 <View style={s.nextRight}>
-                  <Text style={s.nextTime}>{formatTime(nextPrayer.time)}</Text>
+                  <Text style={s.nextTime}>{fmt12(nextPrayer.time)}</Text>
                   <View style={[s.countdownBadge, { backgroundColor: "#FFFFFF25" }]}>
                     <Text style={s.countdownText}>{countdown}</Text>
                   </View>
@@ -223,105 +380,272 @@ export default function PrayerTimesScreen() {
               </View>
             )}
 
-            {/* Prayer List */}
-            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-              {prayers.map(prayer => {
-                const isNext = nextPrayer?.key === prayer.key;
-                const isPast = prayer.time < currentTime;
-                return (
-                  <View
-                    key={prayer.key}
-                    style={[s.prayerRow, {
-                      backgroundColor: isNext ? colors.primary + "12" : colors.card,
-                      borderColor: isNext ? colors.primary : colors.border,
-                    }]}
-                  >
-                    <View style={[s.prayerIcon, {
-                      backgroundColor: isNext ? colors.primary : colors.primary + "15"
-                    }]}>
-                      <Feather name={prayer.icon as any} size={16} color={isNext ? "#FFF" : colors.primary} />
-                    </View>
-                    <View style={s.prayerInfo}>
-                      <Text style={[s.prayerName, { color: isNext ? colors.primary : colors.foreground }]}>
-                        {prayer.name}
-                      </Text>
-                      <Text style={[s.prayerArabic, { color: colors.gold }]}>{prayer.arabic}</Text>
-                    </View>
-                    <View style={s.prayerRight}>
-                      <Text style={[s.prayerTime, {
-                        color: isPast ? colors.mutedForeground : (isNext ? colors.primary : colors.foreground),
-                        opacity: isPast ? 0.5 : 1,
-                      }]}>
-                        {formatTime(prayer.time)}
-                      </Text>
-                      {isNext && <View style={[s.nextDot, { backgroundColor: colors.primary }]} />}
-                      {isPast && prayer.key !== "sunrise" && <Feather name="check" size={14} color={colors.mutedForeground} />}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Calculation Method */}
-            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-              <Text style={[s.sectionTitle, { color: colors.foreground }]}>Calculation Method</Text>
-              <TouchableOpacity
-                style={[s.methodBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowMethods(!showMethods)}
-              >
-                <View style={s.methodBtnLeft}>
-                  <Feather name="settings" size={16} color={colors.primary} />
-                  <Text style={[s.methodBtnText, { color: colors.foreground }]}>
-                    {METHODS.find(m => m.id === method)?.label ?? method}
+            {/* ── Tabs ────────────────────────────────────────────────────── */}
+            <View style={[s.tabRow, { borderBottomColor: colors.border }]}>
+              {([
+                { key: "today", label: "Today" },
+                { key: "week", label: "This Week" },
+                { key: "settings", label: "Notifications" },
+              ] as const).map(t => (
+                <TouchableOpacity
+                  key={t.key}
+                  style={[s.tab, tab === t.key && { borderBottomColor: colors.primary }]}
+                  onPress={() => setTab(t.key)}
+                >
+                  <Text style={[s.tabText, { color: tab === t.key ? colors.primary : colors.mutedForeground }]}>
+                    {t.label}
                   </Text>
-                </View>
-                <Feather name={showMethods ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedForeground} />
-              </TouchableOpacity>
-              {showMethods && (
-                <View style={[s.methodList, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  {METHODS.map(m => (
-                    <TouchableOpacity
-                      key={m.id}
-                      style={[s.methodOption, method === m.id && { backgroundColor: colors.primary + "12" }]}
-                      onPress={() => {
-                        setMethod(m.id);
-                        setShowMethods(false);
-                        if (location) {
-                          const list = calculatePrayers(location.lat, location.lng, m.id);
-                          updateNextPrayer(list);
-                        }
-                      }}
-                    >
-                      <Text style={[s.methodOptionText, { color: method === m.id ? colors.primary : colors.foreground }]}>
-                        {m.label}
-                      </Text>
-                      {method === m.id && <Feather name="check" size={16} color={colors.primary} />}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Sunnah Times */}
-            <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
-              <Text style={[s.sectionTitle, { color: colors.foreground }]}>Dhikr & Sunnah Reminders</Text>
-              {[
-                { label: "After Fajr — Morning Adhkar", arabic: "أذكار الصباح", desc: "Read morning supplications after Fajr prayer" },
-                { label: "After Asr — Evening Adhkar", arabic: "أذكار المساء", desc: "Read evening supplications after Asr prayer" },
-                { label: "Qiyam al-Layl", arabic: "قيام الليل", desc: "Last third of the night — a blessed time for dua" },
-              ].map((item, i) => (
-                <View key={i} style={[s.sunnahCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={[s.sunnahIcon, { backgroundColor: colors.gold + "20" }]}>
-                    <Feather name="moon" size={16} color={colors.gold} />
-                  </View>
-                  <View style={s.sunnahInfo}>
-                    <Text style={[s.sunnahLabel, { color: colors.foreground }]}>{item.label}</Text>
-                    <Text style={[s.sunnahArabic, { color: colors.gold }]}>{item.arabic}</Text>
-                    <Text style={[s.sunnahDesc, { color: colors.mutedForeground }]}>{item.desc}</Text>
-                  </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
+
+            {/* ── TODAY TAB ───────────────────────────────────────────────── */}
+            {tab === "today" && (
+              <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+                {prayers.map(prayer => {
+                  const isNext = nextPrayer?.key === prayer.key;
+                  const isPast = prayer.time < currentTime;
+                  const notifKey = PRAYER_META[prayer.key]?.notifKey;
+                  const notifOn = notifKey ? notif.prefs.enabled[notifKey] : false;
+
+                  return (
+                    <View
+                      key={prayer.key}
+                      style={[s.prayerRow, {
+                        backgroundColor: isNext ? colors.primary + "12" : colors.card,
+                        borderColor: isNext ? colors.primary : colors.border,
+                      }]}
+                    >
+                      <View style={[s.prayerIcon, { backgroundColor: isNext ? colors.primary : colors.primary + "15" }]}>
+                        <Feather name={prayer.icon as any} size={16} color={isNext ? "#FFF" : colors.primary} />
+                      </View>
+                      <View style={s.prayerInfo}>
+                        <Text style={[s.prayerName, { color: isNext ? colors.primary : colors.foreground }]}>
+                          {prayer.name}
+                        </Text>
+                        <Text style={[s.prayerArabic, { color: colors.gold }]}>{prayer.arabic}</Text>
+                      </View>
+                      <View style={s.prayerRight}>
+                        <Text style={[s.prayerTime, {
+                          color: isPast ? colors.mutedForeground : (isNext ? colors.primary : colors.foreground),
+                          opacity: isPast && !isNext ? 0.5 : 1,
+                        }]}>
+                          {fmt12(prayer.time)}
+                        </Text>
+                        <View style={s.prayerActions}>
+                          {isNext && <View style={[s.nextDot, { backgroundColor: colors.primary }]} />}
+                          {isPast && !isNext && prayer.key !== "sunrise" && (
+                            <Feather name="check" size={13} color={colors.mutedForeground} />
+                          )}
+                          {notifKey && (
+                            <TouchableOpacity onPress={() => handleToggleNotif(notifKey)} style={s.bellBtn}>
+                              <Feather
+                                name={notifOn ? "bell" : "bell-off"}
+                                size={15}
+                                color={notifOn ? colors.gold : colors.mutedForeground}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {/* Calculation Method */}
+                <Text style={[s.sectionTitle, { color: colors.foreground, marginTop: 20 }]}>Calculation Method</Text>
+                <TouchableOpacity
+                  style={[s.methodBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => setShowMethods(!showMethods)}
+                >
+                  <View style={s.methodBtnLeft}>
+                    <Feather name="settings" size={16} color={colors.primary} />
+                    <Text style={[s.methodBtnText, { color: colors.foreground }]}>
+                      {METHODS.find(m => m.id === method)?.label ?? method}
+                    </Text>
+                  </View>
+                  <Feather name={showMethods ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedForeground} />
+                </TouchableOpacity>
+                {showMethods && (
+                  <View style={[s.methodList, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {METHODS.map(m => (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={[s.methodOption, method === m.id && { backgroundColor: colors.primary + "12" }]}
+                        onPress={() => handleMethodChange(m.id)}
+                      >
+                        <Text style={[s.methodOptionText, { color: method === m.id ? colors.primary : colors.foreground }]}>
+                          {m.label}
+                        </Text>
+                        {method === m.id && <Feather name="check" size={16} color={colors.primary} />}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* ── WEEK TAB ─────────────────────────────────────────────────── */}
+            {tab === "week" && (
+              <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+                <Text style={[s.sectionNote, { color: colors.mutedForeground }]}>
+                  7-day prayer timetable for {location?.city ?? "your location"}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View>
+                    {/* Table header */}
+                    <View style={[s.tableHeader, { backgroundColor: colors.navy }]}>
+                      <View style={s.tableDay}><Text style={s.tableHeaderText}>Day</Text></View>
+                      {(["fajr", "dhuhr", "asr", "maghrib", "isha"] as const).map(k => (
+                        <View key={k} style={s.tableCell}>
+                          <Text style={s.tableHeaderText}>{PRAYER_META[k].name}</Text>
+                          <Text style={s.tableHeaderAr}>{PRAYER_META[k].arabic}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    {/* Table rows */}
+                    {weeklyData.map((row, i) => {
+                      const isToday = i === 0;
+                      const isFriday = row.date.getDay() === 5;
+                      return (
+                        <View
+                          key={i}
+                          style={[s.tableRow, {
+                            backgroundColor: isToday ? colors.primary + "12" : (i % 2 === 0 ? colors.card : colors.background),
+                            borderLeftColor: isToday ? colors.primary : "transparent",
+                          }]}
+                        >
+                          <View style={s.tableDay}>
+                            <Text style={[s.tableDayName, {
+                              color: isToday ? colors.primary : (isFriday ? colors.gold : colors.foreground),
+                              fontFamily: isToday ? "Inter_700Bold" : "Inter_600SemiBold",
+                            }]}>
+                              {isToday ? "Today" : DAY_NAMES[row.date.getDay()]}
+                            </Text>
+                            <Text style={[s.tableDayNum, { color: colors.mutedForeground }]}>
+                              {row.date.getDate()}/{row.date.getMonth() + 1}
+                            </Text>
+                            {isFriday && <Text style={[s.jumuahTag, { color: colors.gold }]}>Jumu'ah</Text>}
+                          </View>
+                          {(["fajr", "dhuhr", "asr", "maghrib", "isha"] as const).map(k => (
+                            <View key={k} style={s.tableCell}>
+                              <Text style={[s.tableCellText, {
+                                color: isToday ? colors.primary : colors.foreground,
+                                fontFamily: isToday ? "Inter_600SemiBold" : "Inter_400Regular",
+                              }]}>
+                                {row.prayers[k] ? fmtShort(row.prayers[k]) : "—"}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+                <Text style={[s.sectionNote, { color: colors.mutedForeground, marginTop: 12, textAlign: "center" }]}>
+                  Times in 24h format · Method: {METHODS.find(m => m.id === method)?.label}
+                </Text>
+              </View>
+            )}
+
+            {/* ── NOTIFICATIONS TAB ────────────────────────────────────────── */}
+            {tab === "settings" && (
+              <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+                {/* Permission banner */}
+                {!notif.permissionGranted && Platform.OS !== "web" && (
+                  <TouchableOpacity
+                    style={[s.permBanner, { backgroundColor: "#F59E0B15", borderColor: "#F59E0B40" }]}
+                    onPress={notif.requestPermission}
+                  >
+                    <Feather name="bell-off" size={18} color="#F59E0B" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.permTitle, { color: "#F59E0B" }]}>Enable Notifications</Text>
+                      <Text style={[s.permSub, { color: colors.mutedForeground }]}>
+                        Tap to allow notifications for prayer time alerts
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color="#F59E0B" />
+                  </TouchableOpacity>
+                )}
+
+                <Text style={[s.sectionTitle, { color: colors.foreground }]}>Prayer Alerts</Text>
+                <Text style={[s.sectionNote, { color: colors.mutedForeground, marginBottom: 16 }]}>
+                  Get notified {notif.prefs.minutesBefore} minutes before each prayer. Tap the bell to toggle.
+                </Text>
+
+                {PRAYER_KEYS.map(key => {
+                  const meta = PRAYER_META[key];
+                  const on = notif.prefs.enabled[key];
+                  const nextTime = prayers.find(p => p.key === key)?.time;
+
+                  return (
+                    <View key={key} style={[s.notifRow, { backgroundColor: colors.card, borderColor: on ? colors.gold + "50" : colors.border }]}>
+                      <View style={[s.notifIcon, { backgroundColor: on ? colors.gold + "20" : colors.primary + "12" }]}>
+                        <Feather name={meta.icon as any} size={18} color={on ? colors.gold : colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.notifPrayer, { color: colors.foreground }]}>{meta.name}</Text>
+                        <Text style={[s.notifArabic, { color: colors.gold }]}>{meta.arabic}</Text>
+                        {nextTime && (
+                          <Text style={[s.notifTime, { color: colors.mutedForeground }]}>
+                            Today: {fmt12(nextTime)}
+                            {on && ` · Alert at ${fmt12(new Date(nextTime.getTime() - notif.prefs.minutesBefore * 60000))}`}
+                          </Text>
+                        )}
+                      </View>
+                      <Switch
+                        value={on}
+                        onValueChange={() => handleToggleNotif(key)}
+                        trackColor={{ false: colors.border, true: colors.gold + "90" }}
+                        thumbColor={on ? colors.gold : colors.mutedForeground}
+                      />
+                    </View>
+                  );
+                })}
+
+                {/* Quick enable all */}
+                <View style={s.notifBtnsRow}>
+                  <TouchableOpacity
+                    style={[s.notifActionBtn, { backgroundColor: colors.gold + "15", borderColor: colors.gold + "40" }]}
+                    onPress={async () => {
+                      if (!notif.permissionGranted) {
+                        const granted = await notif.requestPermission();
+                        if (!granted) return;
+                      }
+                      for (const k of PRAYER_KEYS) {
+                        if (!notif.prefs.enabled[k]) await notif.togglePrayer(k);
+                      }
+                      const timesMap: Record<string, Date> = {};
+                      prayers.forEach(p => { timesMap[p.key] = p.time; });
+                      await notif.scheduleNotifications(timesMap);
+                    }}
+                  >
+                    <Feather name="bell" size={15} color={colors.gold} />
+                    <Text style={[s.notifActionText, { color: colors.gold }]}>Enable All</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.notifActionBtn, { backgroundColor: colors.border, borderColor: colors.border }]}
+                    onPress={async () => {
+                      for (const k of PRAYER_KEYS) {
+                        if (notif.prefs.enabled[k]) await notif.togglePrayer(k);
+                      }
+                      await notif.cancelAll();
+                    }}
+                  >
+                    <Feather name="bell-off" size={15} color={colors.mutedForeground} />
+                    <Text style={[s.notifActionText, { color: colors.mutedForeground }]}>Disable All</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Info */}
+                <View style={[s.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <MaterialCommunityIcons name="information-outline" size={16} color={colors.primary} />
+                  <Text style={[s.infoText, { color: colors.mutedForeground }]}>
+                    Notifications are scheduled for today's prayers only. They automatically refresh each time you open the app.
+                  </Text>
+                </View>
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -329,19 +653,41 @@ export default function PrayerTimesScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 function makeStyles(colors: any) {
   return StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 20, gap: 12 },
+
+    // Header
+    header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 18, gap: 10 },
     headerCenter: { flex: 1, alignItems: "center" },
-    headerTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: "#FFF" },
+    headerTitle: { fontSize: 19, fontFamily: "Inter_700Bold", color: "#FFF" },
     headerSubtitle: { fontSize: 13, color: "#FFFFFF90" },
-    dateCard: { paddingHorizontal: 20, paddingBottom: 24, alignItems: "center", gap: 4 },
+    headerBtn: { padding: 4 },
+
+    // Search
+    searchBox: { marginHorizontal: 16, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
+    searchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, margin: 10 },
+    searchInput: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", padding: 0 },
+    cityResult: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1 },
+    cityName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+    cityMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
+    cityCoord: { fontSize: 11, fontFamily: "Inter_400Regular" },
+    noResults: { padding: 16, textAlign: "center", fontFamily: "Inter_400Regular" },
+
+    // Date card
+    dateCard: { paddingHorizontal: 20, paddingBottom: 22, alignItems: "center", gap: 4 },
     islamicDate: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#D4A017" },
     gregorianDate: { fontSize: 13, color: "#FFFFFF80", fontFamily: "Inter_400Regular" },
-    locationRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-    locationText: { fontSize: 12, color: "#FFFFFF70", fontFamily: "Inter_400Regular" },
-    nextCard: { marginHorizontal: 16, borderRadius: 20, padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16 },
+    locationRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6, maxWidth: 280 },
+    locationText: { fontSize: 12, color: "#FFFFFF70", fontFamily: "Inter_400Regular", flex: 1, textAlign: "center" },
+    notifBadge: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
+    notifBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+    loadingText: { fontFamily: "Inter_400Regular", marginTop: 12 },
+
+    // Next card
+    nextCard: { marginHorizontal: 16, borderRadius: 20, padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 14 },
     nextLabel: { fontSize: 12, color: "#FFFFFF90", fontFamily: "Inter_400Regular", marginBottom: 4 },
     nextName: { fontSize: 26, fontFamily: "Inter_700Bold", color: "#FFF" },
     nextArabic: { fontSize: 15, color: "#FFFFFF80" },
@@ -349,26 +695,59 @@ function makeStyles(colors: any) {
     nextTime: { fontSize: 30, fontFamily: "Inter_700Bold", color: "#FFF" },
     countdownBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
     countdownText: { fontSize: 13, color: "#FFF", fontFamily: "Inter_600SemiBold" },
-    prayerRow: { flexDirection: "row", alignItems: "center", borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1.5, gap: 14 },
+
+    // Tabs
+    tabRow: { flexDirection: "row", borderBottomWidth: 1, marginTop: 14 },
+    tab: { flex: 1, alignItems: "center", paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: "transparent" },
+    tabText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+
+    // Prayer rows
+    prayerRow: { flexDirection: "row", alignItems: "center", borderRadius: 14, padding: 13, marginBottom: 8, borderWidth: 1.5, gap: 12 },
     prayerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
     prayerInfo: { flex: 1 },
     prayerName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
     prayerArabic: { fontSize: 13 },
     prayerRight: { alignItems: "flex-end", gap: 4 },
     prayerTime: { fontSize: 16, fontFamily: "Inter_700Bold" },
+    prayerActions: { flexDirection: "row", alignItems: "center", gap: 6 },
     nextDot: { width: 8, height: 8, borderRadius: 4 },
+    bellBtn: { padding: 2 },
+
+    // Method
     sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", marginBottom: 12 },
+    sectionNote: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18, marginBottom: 8 },
     methodBtn: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 12, padding: 14, borderWidth: 1 },
     methodBtnLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
     methodBtnText: { fontSize: 14, fontFamily: "Inter_400Regular", flex: 1 },
     methodList: { borderRadius: 12, borderWidth: 1, marginTop: 8, overflow: "hidden" },
     methodOption: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
     methodOptionText: { fontSize: 14, fontFamily: "Inter_400Regular" },
-    sunnahCard: { flexDirection: "row", borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 8, gap: 12 },
-    sunnahIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-    sunnahInfo: { flex: 1 },
-    sunnahLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
-    sunnahArabic: { fontSize: 12, marginBottom: 2 },
-    sunnahDesc: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16 },
+
+    // Weekly table
+    tableHeader: { flexDirection: "row", paddingVertical: 10 },
+    tableHeaderText: { color: "#FFF", fontSize: 12, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+    tableHeaderAr: { color: "#FFFFFF80", fontSize: 11, textAlign: "center" },
+    tableRow: { flexDirection: "row", paddingVertical: 10, borderLeftWidth: 3 },
+    tableDay: { width: 70, paddingLeft: 10, justifyContent: "center" },
+    tableCell: { width: 68, alignItems: "center", justifyContent: "center" },
+    tableDayName: { fontSize: 13, marginBottom: 2 },
+    tableDayNum: { fontSize: 11, fontFamily: "Inter_400Regular" },
+    jumuahTag: { fontSize: 9, fontFamily: "Inter_600SemiBold", marginTop: 2 },
+    tableCellText: { fontSize: 13 },
+
+    // Notification settings
+    permBanner: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 16 },
+    permTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+    permSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+    notifRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 10 },
+    notifIcon: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+    notifPrayer: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+    notifArabic: { fontSize: 13, marginTop: 1 },
+    notifTime: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 3 },
+    notifBtnsRow: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 16 },
+    notifActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 12, borderWidth: 1, paddingVertical: 11 },
+    notifActionText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+    infoBox: { flexDirection: "row", gap: 10, borderRadius: 12, borderWidth: 1, padding: 14, marginTop: 4 },
+    infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   });
 }
