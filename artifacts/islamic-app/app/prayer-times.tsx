@@ -11,7 +11,9 @@ import {
   FlatList,
   Alert,
   Switch,
+  Share,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -41,15 +43,17 @@ interface CityResult {
   longitude: number;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PRAYER_META: Record<string, { name: string; arabic: string; icon: string; notifKey?: PrayerKey }> = {
-  fajr:    { name: "Fajr",    arabic: "الفجر",    icon: "sunrise",  notifKey: "fajr"    },
-  sunrise: { name: "Sunrise", arabic: "الشروق",   icon: "sun"                            },
-  dhuhr:   { name: "Dhuhr",   arabic: "الظهر",    icon: "sun",      notifKey: "dhuhr"   },
-  asr:     { name: "Asr",     arabic: "العصر",    icon: "sunset",   notifKey: "asr"     },
-  maghrib: { name: "Maghrib", arabic: "المغرب",   icon: "sunset",   notifKey: "maghrib" },
-  isha:    { name: "Isha",    arabic: "العشاء",   icon: "moon",     notifKey: "isha"    },
+const PRAYER_META: Record<string, { name: string; urdu: string; arabic: string; icon: string; category?: "fard" | "nafl" | "sunnah"; notifKey?: PrayerKey }> = {
+  sehri:      { name: "Sehri Ends", urdu: "سحر ختم", arabic: "نهاية السحور", icon: "moon", category: "sunnah" },
+  fajr:       { name: "Fajr Adhan", urdu: "اذان فجر", arabic: "الفجر", icon: "sunrise", category: "fard", notifKey: "fajr" },
+  sunrise:    { name: "Sunrise", urdu: "طلوع آفتاب", arabic: "الشروق", icon: "sun" },
+  ishraq:     { name: "Ishraq", urdu: "اشراق", arabic: "الإشراق", icon: "sun", category: "nafl" },
+  zawal:      { name: "Zawal / Nisf an-Nahar", urdu: "زوال آفتاب", arabic: "زوال الشمس", icon: "clock-outline" },
+  dhuhr:      { name: "Dhuhr", urdu: "ظہر", arabic: "الظهر", icon: "sun", category: "fard", notifKey: "dhuhr" },
+  asr_shafi:  { name: "Asr (Shafi/Jumhoor)", urdu: "عصر شافعی", arabic: "العصر (شافعي)", icon: "sunset", category: "fard" },
+  asr_hanafi: { name: "Asr (Hanafi/Mithlayn)", urdu: "عصر حنفی", arabic: "العصر (حنفي)", icon: "sunset", category: "fard", notifKey: "asr" },
+  maghrib:    { name: "Maghrib / Sunset", urdu: "غروب آفتاب / مغرب", arabic: "المغرب", icon: "sunset", category: "fard", notifKey: "maghrib" },
+  isha:       { name: "Isha", urdu: "عشاء", arabic: "العشاء", icon: "moon", category: "fard", notifKey: "isha" },
 };
 
 const METHODS = [
@@ -104,31 +108,110 @@ function getIslamicDate(): string {
   } catch { return ""; }
 }
 
-function buildPrayerList(lat: number, lng: number, methodId: string, date?: Date, madhabParam?: string): PrayerEntry[] {
+interface DailyTimetableRow {
+  date: Date;
+  dateStr: string;
+  islamicDateStr: string;
+  sehri: Date;
+  fajr: Date;
+  sunrise: Date;
+  ishraq: Date;
+  zawal: Date;
+  dhuhr: Date;
+  asr_shafi: Date;
+  asr_hanafi: Date;
+  maghrib: Date;
+  isha: Date;
+}
+
+function buildPrayerList(lat: number, lng: number, methodId: string, date?: Date): PrayerEntry[] {
   const coords = new Coordinates(lat, lng);
-  const params = (CalculationMethod as any)[methodId]?.() ?? CalculationMethod.Karachi();
-  params.madhab = (madhabParam === "shafi") ? Madhab.Shafi : Madhab.Hanafi;
   const d = date ?? new Date();
-  const pt = new PrayerTimes(coords, d, params);
+
+  // Hanafi params for Asr (Mithlayn)
+  const paramsHanafi = (CalculationMethod as any)[methodId]?.() ?? CalculationMethod.Karachi();
+  paramsHanafi.madhab = Madhab.Hanafi;
+  const ptHanafi = new PrayerTimes(coords, d, paramsHanafi);
+
+  // Shafi params for Asr (Mithl-e-Awwal)
+  const paramsShafi = (CalculationMethod as any)[methodId]?.() ?? CalculationMethod.Karachi();
+  paramsShafi.madhab = Madhab.Shafi;
+  const ptShafi = new PrayerTimes(coords, d, paramsShafi);
+
+  // Exact astronomical calculations:
+  // 1. وقت سحر: اذان فجر سے 1 منٹ پہلے (احتیاطی اختتام سحر)
+  const sehriTime = new Date(ptHanafi.fajr.getTime() - 1 * 60 * 1000);
+
+  // 2. اذان فجر: سحر کے 2 منٹ بعد (یعنی اصلی فجر سے 1 منٹ بعد یا اذان فجر وقت)
+  const fajrAdhanTime = new Date(sehriTime.getTime() + 2 * 60 * 1000);
+
+  // 3. طلوع آفتاب
+  const sunriseTime = ptHanafi.sunrise;
+
+  // 4. اشراق: طلوع آفتاب کے 15 منٹ بعد
+  const ishraqTime = new Date(sunriseTime.getTime() + 15 * 60 * 1000);
+
+  // 5. زوال / نصف النہار شرعی: ظہر کے وقت سے 5 منٹ قبل (مکروہ وقت استواء الشمس)
+  const zawalTime = new Date(ptHanafi.dhuhr.getTime() - 5 * 60 * 1000);
+
+  // 6. ظہر
+  const dhuhrTime = ptHanafi.dhuhr;
+
+  // 7. عصر شافعی
+  const asrShafiTime = ptShafi.asr;
+
+  // 8. عصر حنفی
+  const asrHanafiTime = ptHanafi.asr;
+
+  // 9. غروب آفتاب / مغرب
+  const maghribTime = ptHanafi.maghrib;
+
+  // 10. عشاء
+  const ishaTime = ptHanafi.isha;
+
   return [
-    { key: "fajr",    time: pt.fajr,    ...PRAYER_META.fajr    },
-    { key: "sunrise", time: pt.sunrise, ...PRAYER_META.sunrise  },
-    { key: "dhuhr",   time: pt.dhuhr,   ...PRAYER_META.dhuhr   },
-    { key: "asr",     time: pt.asr,     ...PRAYER_META.asr      },
-    { key: "maghrib", time: pt.maghrib, ...PRAYER_META.maghrib  },
-    { key: "isha",    time: pt.isha,    ...PRAYER_META.isha      },
+    { key: "sehri",      time: sehriTime,      ...PRAYER_META.sehri      },
+    { key: "fajr",       time: fajrAdhanTime,  ...PRAYER_META.fajr       },
+    { key: "sunrise",    time: sunriseTime,    ...PRAYER_META.sunrise    },
+    { key: "ishraq",     time: ishraqTime,     ...PRAYER_META.ishraq     },
+    { key: "zawal",      time: zawalTime,      ...PRAYER_META.zawal      },
+    { key: "dhuhr",      time: dhuhrTime,      ...PRAYER_META.dhuhr      },
+    { key: "asr_shafi",  time: asrShafiTime,   ...PRAYER_META.asr_shafi  },
+    { key: "asr_hanafi", time: asrHanafiTime,  ...PRAYER_META.asr_hanafi },
+    { key: "maghrib",    time: maghribTime,    ...PRAYER_META.maghrib    },
+    { key: "isha",       time: ishaTime,       ...PRAYER_META.isha       },
   ];
 }
 
-function buildWeeklyTable(lat: number, lng: number, methodId: string) {
+function buildMultiDayTable(lat: number, lng: number, methodId: string, daysCount: number = 7): DailyTimetableRow[] {
   const today = new Date();
-  return Array.from({ length: 7 }, (_, i) => {
+  return Array.from({ length: daysCount }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     const list = buildPrayerList(lat, lng, methodId, d);
     const byKey: Record<string, Date> = {};
     list.forEach(p => { byKey[p.key] = p.time; });
-    return { date: d, prayers: byKey };
+
+    let islamicStr = "";
+    try {
+      islamicStr = d.toLocaleDateString("en-US-u-ca-islamic", { day: "numeric", month: "short" });
+    } catch {}
+
+    return {
+      date: d,
+      dateStr: d.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" }),
+      islamicDateStr: islamicStr,
+      sehri: byKey.sehri,
+      fajr: byKey.fajr,
+      sunrise: byKey.sunrise,
+      ishraq: byKey.ishraq,
+      zawal: byKey.zawal,
+      dhuhr: byKey.dhuhr,
+      asr_shafi: byKey.asr_shafi,
+      asr_hanafi: byKey.asr_hanafi,
+      maghrib: byKey.maghrib,
+      isha: byKey.isha,
+    };
   });
 }
 
@@ -252,14 +335,17 @@ export default function PrayerTimesScreen() {
     }
   };
 
-  // Weekly
-  const [weeklyData, setWeeklyData] = useState<{ date: Date; prayers: Record<string, Date> }[]>([]);
+  // Multi-Day Timetable state
+  const [timetableDays, setTimetableDays] = useState<7 | 15 | 30>(7);
+  const [multiDayData, setMultiDayData] = useState<DailyTimetableRow[]>([]);
 
   const updateNextPrayer = useCallback((list: PrayerEntry[]) => {
     const now = new Date();
-    const next = list.find(p => p.time > now) ?? list[0];
-    setNextPrayer(next);
-    const diff = next.time.getTime() - now.getTime();
+    // Exclude sunrise, zawal, ishraq, and sehri from primary fard next countdown or choose next fard
+    const fardKeys = ["fajr", "dhuhr", "asr_hanafi", "maghrib", "isha"];
+    const nextFard = list.find(p => fardKeys.includes(p.key) && p.time > now) ?? list.find(p => p.time > now) ?? list[0];
+    setNextPrayer(nextFard);
+    const diff = nextFard.time.getTime() - now.getTime();
     setCountdown(formatCountdown(diff < 0 ? 0 : diff));
   }, []);
 
@@ -272,13 +358,71 @@ export default function PrayerTimesScreen() {
     setLocation(locObj);
     AsyncStorage.setItem(LAST_LOCATION_STORAGE_KEY, JSON.stringify(locObj)).catch(() => {});
 
-    const weekly = buildWeeklyTable(lat, lng, m);
-    setWeeklyData(weekly);
-    // Schedule notifications with new times
+    const multi = buildMultiDayTable(lat, lng, m, timetableDays);
+    setMultiDayData(multi);
+
+    // Schedule notifications for fard prayers
     const timesMap: Record<string, Date> = {};
-    list.forEach(p => { timesMap[p.key] = p.time; });
+    list.forEach(p => {
+      if (p.key === "fajr") timesMap["fajr"] = p.time;
+      if (p.key === "dhuhr") timesMap["dhuhr"] = p.time;
+      if (p.key === "asr_hanafi") timesMap["asr"] = p.time;
+      if (p.key === "maghrib") timesMap["maghrib"] = p.time;
+      if (p.key === "isha") timesMap["isha"] = p.time;
+    });
     notif.scheduleNotifications(timesMap);
-  }, [method, updateNextPrayer, notif.scheduleNotifications]);
+  }, [method, updateNextPrayer, timetableDays, notif.scheduleNotifications]);
+
+  const handleDaysChange = (days: 7 | 15 | 30) => {
+    setTimetableDays(days);
+    if (location) {
+      const multi = buildMultiDayTable(location.lat, location.lng, method, days);
+      setMultiDayData(multi);
+    }
+  };
+
+  const handleExportText = async () => {
+    if (!location || multiDayData.length === 0) return;
+    const cityName = location.city;
+    let exportText = `═══════════════════════════════════════════════\n`;
+    exportText += `🕌 دائمی نقشہ اوقاتِ صلوٰۃ و سحر و افطار\n`;
+    exportText += `📍 مقام: ${cityName}\n`;
+    exportText += `📅 دورانیہ: ${timetableDays} یومیہ جدول\n`;
+    exportText += `⚖️ فقہی ضابطہ: حنفی و شافعی (مستند فلکیاتی حساب)\n`;
+    exportText += `═══════════════════════════════════════════════\n\n`;
+
+    multiDayData.forEach((row, idx) => {
+      exportText += `【${idx + 1}】 ${row.dateStr} (${row.islamicDateStr || "ہجری"})\n`;
+      exportText += `• وقت سحر (اختتام): ${fmtShort(row.sehri)}\n`;
+      exportText += `• اذان فجر: ${fmtShort(row.fajr)}\n`;
+      exportText += `• طلوع آفتاب: ${fmtShort(row.sunrise)}\n`;
+      exportText += `• اشراق (15 منٹ بعد): ${fmtShort(row.ishraq)}\n`;
+      exportText += `• زوال (نصف النہار): ${fmtShort(row.zawal)}\n`;
+      exportText += `• ظہر: ${fmtShort(row.dhuhr)}\n`;
+      exportText += `• عصر شافعی: ${fmtShort(row.asr_shafi)}\n`;
+      exportText += `• عصر حنفی: ${fmtShort(row.asr_hanafi)}\n`;
+      exportText += `• غروب / مغرب: ${fmtShort(row.maghrib)}\n`;
+      exportText += `• عشاء: ${fmtShort(row.isha)}\n`;
+      exportText += `───────────────────────────────────────────────\n`;
+    });
+
+    exportText += `\nمحفوظ شدہ بذریعہ اسلامی ریسرچ و لرننگ OS`;
+
+    try {
+      if (Platform.OS === "web") {
+        await Clipboard.setStringAsync(exportText);
+        Alert.alert("کامیابی", "مکمل نقشہ اوقات صلوٰۃ کلپ بورڈ پر کاپی کر دیا گیا ہے!");
+      } else {
+        await Share.share({
+          title: `نقشہ اوقات صلوٰۃ - ${cityName}`,
+          message: exportText,
+        });
+      }
+    } catch {
+      await Clipboard.setStringAsync(exportText);
+      Alert.alert("کاپی ہو گیا", "مکمل جدول کلپ بورڈ پر محفوظ ہو گیا ہے۔");
+    }
+  };
 
   const loadAutoLocation = useCallback(async (chosenMethod?: string) => {
     setLoading(true);
@@ -544,52 +688,77 @@ export default function PrayerTimesScreen() {
             {/* ── Tabs ────────────────────────────────────────────────────── */}
             <View style={[s.tabRow, { borderBottomColor: colors.border }]}>
               {([
-                { key: "today", label: "Today" },
-                { key: "week", label: "This Week" },
-                { key: "settings", label: "Notifications" },
+                { key: "today", label: "روزانہ کارڈز (Today)" },
+                { key: "week", label: "تاریخ وار نقشہ (Timetable)" },
+                { key: "settings", label: "نوٹیفکیشنز (Alerts)" },
               ] as const).map(t => (
                 <TouchableOpacity
                   key={t.key}
-                  style={[s.tab, tab === t.key && { borderBottomColor: colors.primary }]}
+                  style={[s.tab, tab === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 3 }]}
                   onPress={() => setTab(t.key)}
                 >
-                  <Text style={[s.tabText, { color: tab === t.key ? colors.primary : colors.mutedForeground }]}>
+                  <Text style={[s.tabText, { color: tab === t.key ? colors.primary : colors.mutedForeground, fontWeight: tab === t.key ? "700" : "500" }]}>
                     {t.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* ── TODAY TAB ───────────────────────────────────────────────── */}
+            {/* ── TODAY TAB (10 INDIVIDUAL CARDS) ───────────────────────── */}
             {tab === "today" && (
               <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+                <Text style={[s.sectionNote, { color: colors.mutedForeground, marginBottom: 10 }]}>
+                  آج کا مکمل فلکیاتی و شرعی جدول: سحر، فجر، اشراق، زوال، ظہر، عصرین (شافعی و حنفی)، غروب و عشاء
+                </Text>
                 {prayers.map(prayer => {
                   const isNext = nextPrayer?.key === prayer.key;
                   const isPast = prayer.time < currentTime;
-                  const notifKey = PRAYER_META[prayer.key]?.notifKey;
+                  const meta = PRAYER_META[prayer.key];
+                  const notifKey = meta?.notifKey;
                   const notifOn = notifKey ? notif.prefs.enabled[notifKey] : false;
+
+                  const getBadge = () => {
+                    if (prayer.key === "sehri") return { label: "سنت / احتیاط", color: "#F59E0B" };
+                    if (prayer.key === "ishraq") return { label: "نفل", color: "#10B981" };
+                    if (prayer.key === "zawal") return { label: "مکروہ وقت", color: "#EF4444" };
+                    if (prayer.key === "asr_shafi") return { label: "شافعی / جمہور", color: "#8B5CF6" };
+                    if (prayer.key === "asr_hanafi") return { label: "حنفی (مثلین)", color: "#3B82F6" };
+                    if (prayer.key === "sunrise" || prayer.key === "maghrib") return { label: "طلوع / غروب", color: "#D97706" };
+                    return { label: "فرض", color: colors.primary };
+                  };
+
+                  const badge = getBadge();
 
                   return (
                     <View
                       key={prayer.key}
                       style={[s.prayerRow, {
-                        backgroundColor: isNext ? colors.primary + "12" : colors.card,
+                        backgroundColor: isNext ? colors.primary + "15" : colors.card,
                         borderColor: isNext ? colors.primary : colors.border,
+                        borderWidth: isNext ? 2 : 1,
                       }]}
                     >
                       <View style={[s.prayerIcon, { backgroundColor: isNext ? colors.primary : colors.primary + "15" }]}>
-                        <Feather name={prayer.icon as any} size={16} color={isNext ? "#FFF" : colors.primary} />
+                        <Feather name={prayer.icon as any} size={18} color={isNext ? "#FFF" : colors.primary} />
                       </View>
                       <View style={s.prayerInfo}>
-                        <Text style={[s.prayerName, { color: isNext ? colors.primary : colors.foreground }]}>
-                          {prayer.name}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <Text style={[s.prayerName, { color: isNext ? colors.primary : colors.foreground, fontWeight: "700" }]}>
+                            {meta?.urdu || prayer.name}
+                          </Text>
+                          <View style={{ backgroundColor: badge.color + "20", paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 6 }}>
+                            <Text style={{ fontSize: 10, color: badge.color, fontWeight: "700" }}>{badge.label}</Text>
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 1 }}>
+                          {prayer.name} · {prayer.arabic}
                         </Text>
-                        <Text style={[s.prayerArabic, { color: colors.gold }]}>{prayer.arabic}</Text>
                       </View>
                       <View style={s.prayerRight}>
                         <Text style={[s.prayerTime, {
                           color: isPast ? colors.mutedForeground : (isNext ? colors.primary : colors.foreground),
-                          opacity: isPast && !isNext ? 0.5 : 1,
+                          opacity: isPast && !isNext ? 0.6 : 1,
+                          fontSize: 17,
                         }]}>
                           {fmt12(prayer.time)}
                         </Text>
@@ -646,66 +815,121 @@ export default function PrayerTimesScreen() {
               </View>
             )}
 
-            {/* ── WEEK TAB ─────────────────────────────────────────────────── */}
+            {/* ── MULTI-DAY TIMETABLE & EXPORT TAB ───────────────────────── */}
             {tab === "week" && (
               <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-                <Text style={[s.sectionNote, { color: colors.mutedForeground }]}>
-                  7-day prayer timetable for {location?.city ?? "your location"}
+                {/* Header Controls: Days selector & Export Button */}
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                  <View style={{ flexDirection: "row", backgroundColor: colors.card, borderRadius: 10, borderWidth: 1, borderColor: colors.border, padding: 3 }}>
+                    {([7, 15, 30] as const).map(d => (
+                      <TouchableOpacity
+                        key={d}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          backgroundColor: timetableDays === d ? colors.primary : "transparent",
+                        }}
+                        onPress={() => handleDaysChange(d)}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: timetableDays === d ? "#FFF" : colors.mutedForeground }}>
+                          {d} یوم ({d} Days)
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: colors.primary,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 10,
+                      gap: 6,
+                    }}
+                    onPress={handleExportText}
+                  >
+                    <Feather name="share-2" size={15} color="#FFF" />
+                    <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>ایکسپورٹ / شیئر</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[s.sectionNote, { color: colors.mutedForeground, marginBottom: 8 }]}>
+                  {location?.city ?? "آپ کے مقام"} کا {timetableDays} یومیہ جدولِ اوقات (سحر، فجر، اشراق، زوال، ظہر، عصر شافعی، عصر حنفی، غروب، عشاء)
                 </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ borderRadius: 12, borderWidth: 1, borderColor: colors.border }}>
                   <View>
-                    {/* Table header */}
+                    {/* Table Header */}
                     <View style={[s.tableHeader, { backgroundColor: colors.navy }]}>
-                      <View style={s.tableDay}><Text style={s.tableHeaderText}>Day</Text></View>
-                      {(["fajr", "dhuhr", "asr", "maghrib", "isha"] as const).map(k => (
-                        <View key={k} style={s.tableCell}>
-                          <Text style={s.tableHeaderText}>{PRAYER_META[k].name}</Text>
-                          <Text style={s.tableHeaderAr}>{PRAYER_META[k].arabic}</Text>
-                        </View>
-                      ))}
+                      <View style={[s.tableDay, { width: 95 }]}><Text style={s.tableHeaderText}>تاریخ / دن</Text></View>
+                      <View style={[s.tableCell, { width: 70 }]}><Text style={s.tableHeaderText}>وقتِ سحر</Text><Text style={s.tableHeaderAr}>ختم سحر</Text></View>
+                      <View style={[s.tableCell, { width: 70 }]}><Text style={s.tableHeaderText}>اذان فجر</Text><Text style={s.tableHeaderAr}>الفجر</Text></View>
+                      <View style={[s.tableCell, { width: 70 }]}><Text style={s.tableHeaderText}>طلوع آفتاب</Text><Text style={s.tableHeaderAr}>الشروق</Text></View>
+                      <View style={[s.tableCell, { width: 70 }]}><Text style={s.tableHeaderText}>اشراق</Text><Text style={s.tableHeaderAr}>+15 منٹ</Text></View>
+                      <View style={[s.tableCell, { width: 70 }]}><Text style={s.tableHeaderText}>نصف النہار</Text><Text style={s.tableHeaderAr}>زوال</Text></View>
+                      <View style={[s.tableCell, { width: 70 }]}><Text style={s.tableHeaderText}>ظہر</Text><Text style={s.tableHeaderAr}>الظهر</Text></View>
+                      <View style={[s.tableCell, { width: 75 }]}><Text style={s.tableHeaderText}>عصر شافعی</Text><Text style={s.tableHeaderAr}>مثل اول</Text></View>
+                      <View style={[s.tableCell, { width: 75 }]}><Text style={s.tableHeaderText}>عصر حنفی</Text><Text style={s.tableHeaderAr}>مثلین</Text></View>
+                      <View style={[s.tableCell, { width: 75 }]}><Text style={s.tableHeaderText}>غروب/مغرب</Text><Text style={s.tableHeaderAr}>المغرب</Text></View>
+                      <View style={[s.tableCell, { width: 70 }]}><Text style={s.tableHeaderText}>عشاء</Text><Text style={s.tableHeaderAr}>العشاء</Text></View>
                     </View>
-                    {/* Table rows */}
-                    {weeklyData.map((row, i) => {
+
+                    {/* Table Rows */}
+                    {multiDayData.map((row, i) => {
                       const isToday = i === 0;
                       const isFriday = row.date.getDay() === 5;
                       return (
                         <View
                           key={i}
                           style={[s.tableRow, {
-                            backgroundColor: isToday ? colors.primary + "12" : (i % 2 === 0 ? colors.card : colors.background),
-                            borderLeftColor: isToday ? colors.primary : "transparent",
+                            backgroundColor: isToday ? colors.primary + "15" : (i % 2 === 0 ? colors.card : colors.background),
+                            borderLeftColor: isToday ? colors.primary : (isFriday ? colors.gold : "transparent"),
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
                           }]}
                         >
-                          <View style={s.tableDay}>
+                          <View style={[s.tableDay, { width: 95 }]}>
                             <Text style={[s.tableDayName, {
                               color: isToday ? colors.primary : (isFriday ? colors.gold : colors.foreground),
                               fontFamily: isToday ? "Inter_700Bold" : "Inter_600SemiBold",
+                              fontSize: 12,
                             }]}>
-                              {isToday ? "Today" : DAY_NAMES[row.date.getDay()]}
+                              {isToday ? "آج (Today)" : DAY_NAMES[row.date.getDay()]}
                             </Text>
-                            <Text style={[s.tableDayNum, { color: colors.mutedForeground }]}>
-                              {row.date.getDate()}/{row.date.getMonth() + 1}
+                            <Text style={[s.tableDayNum, { color: colors.mutedForeground, fontSize: 10 }]}>
+                              {row.date.getDate()}/{row.date.getMonth() + 1} · {row.islamicDateStr}
                             </Text>
-                            {isFriday && <Text style={[s.jumuahTag, { color: colors.gold }]}>Jumu'ah</Text>}
+                            {isFriday && <Text style={[s.jumuahTag, { color: colors.gold, fontSize: 9 }]}>جمعۃ المبارک</Text>}
                           </View>
-                          {(["fajr", "dhuhr", "asr", "maghrib", "isha"] as const).map(k => (
-                            <View key={k} style={s.tableCell}>
-                              <Text style={[s.tableCellText, {
-                                color: isToday ? colors.primary : colors.foreground,
-                                fontFamily: isToday ? "Inter_600SemiBold" : "Inter_400Regular",
-                              }]}>
-                                {row.prayers[k] ? fmtShort(row.prayers[k]) : "—"}
-                              </Text>
-                            </View>
-                          ))}
+
+                          <View style={[s.tableCell, { width: 70 }]}><Text style={[s.tableCellText, { color: colors.foreground, fontSize: 12 }]}>{fmtShort(row.sehri)}</Text></View>
+                          <View style={[s.tableCell, { width: 70 }]}><Text style={[s.tableCellText, { color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }]}>{fmtShort(row.fajr)}</Text></View>
+                          <View style={[s.tableCell, { width: 70 }]}><Text style={[s.tableCellText, { color: colors.mutedForeground, fontSize: 12 }]}>{fmtShort(row.sunrise)}</Text></View>
+                          <View style={[s.tableCell, { width: 70 }]}><Text style={[s.tableCellText, { color: "#10B981", fontSize: 12 }]}>{fmtShort(row.ishraq)}</Text></View>
+                          <View style={[s.tableCell, { width: 70 }]}><Text style={[s.tableCellText, { color: "#EF4444", fontSize: 12 }]}>{fmtShort(row.zawal)}</Text></View>
+                          <View style={[s.tableCell, { width: 70 }]}><Text style={[s.tableCellText, { color: colors.foreground, fontSize: 12 }]}>{fmtShort(row.dhuhr)}</Text></View>
+                          <View style={[s.tableCell, { width: 75 }]}><Text style={[s.tableCellText, { color: "#8B5CF6", fontSize: 12 }]}>{fmtShort(row.asr_shafi)}</Text></View>
+                          <View style={[s.tableCell, { width: 75 }]}><Text style={[s.tableCellText, { color: "#3B82F6", fontFamily: "Inter_600SemiBold", fontSize: 12 }]}>{fmtShort(row.asr_hanafi)}</Text></View>
+                          <View style={[s.tableCell, { width: 75 }]}><Text style={[s.tableCellText, { color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }]}>{fmtShort(row.maghrib)}</Text></View>
+                          <View style={[s.tableCell, { width: 70 }]}><Text style={[s.tableCellText, { color: colors.foreground, fontSize: 12 }]}>{fmtShort(row.isha)}</Text></View>
                         </View>
                       );
                     })}
                   </View>
                 </ScrollView>
-                <Text style={[s.sectionNote, { color: colors.mutedForeground, marginTop: 12, textAlign: "center" }]}>
-                  Times in 24h format · Method: {METHODS.find(m => m.id === method)?.label}
-                </Text>
+
+                <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={[s.sectionNote, { color: colors.mutedForeground, fontSize: 11 }]}>
+                    * اوقات 24 گھنٹے فارمیٹ میں ہیں · فقہ حنفی و شافعی مطابقت
+                  </Text>
+                  <TouchableOpacity onPress={handleExportText} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Feather name="copy" size={13} color={colors.primary} />
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>کلپ بورڈ کاپی</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 

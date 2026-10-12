@@ -34,12 +34,9 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
 
+  // Seamless Guest Mode: App opens directly to tabs without blocking user with login
   useEffect(() => {
-    if (!isLoading) {
-      if (!user) {
-        router.replace("/auth/login");
-      }
-    }
+    // If auth finishes and there is completely no state, guest user kicks in via AuthContext
   }, [user, isLoading]);
 
   return (

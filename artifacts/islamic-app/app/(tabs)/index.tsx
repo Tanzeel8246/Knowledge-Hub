@@ -123,6 +123,15 @@ export default function HomeScreen() {
 
   const s = makeStyles(colors);
 
+  const featuredActions = [
+    { icon: "book-open-variant", label: "تلاوتِ قرآن", labelEn: "Quran", route: "/quran", color: colors.teal },
+    { icon: "mosque", label: "اوقاتِ صلوٰۃ", labelEn: "Prayer Times", route: "/prayer-times", color: "#0891B2" },
+    { icon: "compass", label: "قبلہ و شمسی سایہ", labelEn: "Qibla & Sun", route: "/qibla", color: "#7C3AED" },
+    { icon: "script-text-outline", label: "کتبِ حدیث", labelEn: "Hadith", route: "/hadith", color: colors.gold },
+    { icon: "shield-check", label: "فتاویٰ آرکائیو", labelEn: "Fatawa", route: "/fatawa-archive", color: "#B45309" },
+    { icon: "library", label: "اسلامی لائبریری", labelEn: "Books", route: "/books", color: colors.primary },
+  ];
+
   const quickActions = [
     { icon: "book-open-variant", label: "Read Quran", route: "/quran", color: colors.teal },
     { icon: "script-text-outline", label: "Hadith", route: "/hadith", color: colors.gold },
@@ -162,7 +171,7 @@ export default function HomeScreen() {
     { icon: "shield-check", label: "Fatawa Archive", route: "/fatawa-archive", color: "#B45309" },
   ];
 
-  const [activeCategory, setActiveCategory] = React.useState<"all" | "worship" | "research" | "learning" | "tools">("all");
+  const [activeCategory, setActiveCategory] = React.useState<"all" | "worship" | "research" | "learning" | "tools">("worship");
 
   const categories = [
     { id: "all", label: "تمام (All)" },
@@ -270,9 +279,41 @@ export default function HomeScreen() {
           <Text style={[s.verseRef, { color: colors.gold }]}>— {dailyHadith.narrator}</Text>
         </TouchableOpacity>
 
+        {/* Primary Core Tools (بنیادی خدمات) */}
+        <Text style={[s.sectionTitle, { color: colors.foreground, marginBottom: 10 }]}>بنیادی سہولیات (Core Essentials)</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+          {featuredActions.map(f => (
+            <TouchableOpacity
+              key={f.route}
+              style={{
+                width: "31%",
+                backgroundColor: colors.card,
+                borderRadius: 14,
+                paddingVertical: 14,
+                paddingHorizontal: 8,
+                alignItems: "center",
+                borderWidth: 1.5,
+                borderColor: f.color + "30",
+                gap: 6,
+              }}
+              onPress={() => router.push(f.route as any)}
+            >
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: f.color + "18", alignItems: "center", justifyContent: "center" }}>
+                <MaterialCommunityIcons name={f.icon as any} size={24} color={f.color} />
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: colors.foreground, textAlign: "center" }}>
+                {f.label}
+              </Text>
+              <Text style={{ fontSize: 10, color: colors.mutedForeground, textAlign: "center" }}>
+                {f.labelEn}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Quick Actions Header & Category Filters */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <Text style={[s.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Explore ({filteredActions.length})</Text>
+          <Text style={[s.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>تمام ٹولز و خدمات ({filteredActions.length})</Text>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 16 }}>

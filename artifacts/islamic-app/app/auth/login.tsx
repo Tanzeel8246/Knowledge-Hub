@@ -97,6 +97,14 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
+        {/* Instant Guest Mode Button */}
+        <TouchableOpacity
+          style={[s.loginBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, marginTop: 10 }]}
+          onPress={() => router.replace("/(tabs)")}
+        >
+          <Text style={[s.loginBtnText, { color: colors.foreground }]}>بغیر لاگ ان جاری رکھیں (Continue as Guest)</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity onPress={() => { setEmail("admin@islamicresearch.app"); setPassword("admin123456"); }}>
           <Text style={[s.demo, { color: colors.primary }]}>Use demo credentials</Text>
         </TouchableOpacity>

@@ -506,7 +506,7 @@ export default function SettingsScreen() {
             <View style={s.rowBody}>
               <Text style={[s.rowLabel, { color: colors.foreground }]}>App Version</Text>
             </View>
-            <Text style={[s.rowValue, { color: colors.mutedForeground }]}>1.0.0</Text>
+            <Text style={[s.rowValue, { color: colors.primary, fontWeight: "700" }]}>3.1.3</Text>
           </View>
           <View style={[s.row, { borderBottomColor: colors.border }]}>
             <View style={[s.rowIcon, { backgroundColor: colors.gold + "20" }]}>

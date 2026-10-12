@@ -16,10 +16,22 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  isGuest: boolean;
   login: (user: User, token: string) => Promise<void>;
+  loginAsGuest: () => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (user: User) => void;
 }
+
+const GUEST_USER: User = {
+  id: "guest-user",
+  name: "طالبِ علم (Guest)",
+  email: "guest@knowledgehub.local",
+  role: "user",
+  language: "ur",
+  theme: "light",
+  avatarUrl: null,
+};
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -30,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -41,9 +54,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (storedToken && storedUser) {
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
+          setIsGuest(false);
+        } else {
+          // Instant Guest Mode: App opens right away!
+          setUser(GUEST_USER);
+          setToken("guest-token");
+          setIsGuest(true);
         }
       } catch {
-        await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+        setUser(GUEST_USER);
+        setToken("guest-token");
+        setIsGuest(true);
       } finally {
         setIsLoading(false);
       }
@@ -63,13 +84,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(newUser);
   }, []);
 
+  const loginAsGuest = useCallback(async () => {
+    setUser(GUEST_USER);
+    setToken("guest-token");
+    setIsGuest(true);
+  }, []);
+
   const logout = useCallback(async () => {
     await Promise.all([
       AsyncStorage.removeItem(TOKEN_KEY),
       AsyncStorage.removeItem(USER_KEY),
     ]);
-    setToken(null);
-    setUser(null);
+    setUser(GUEST_USER);
+    setToken("guest-token");
+    setIsGuest(true);
   }, []);
 
   const updateUser = useCallback((updated: User) => {
@@ -78,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, token, isLoading, isGuest, login, loginAsGuest, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

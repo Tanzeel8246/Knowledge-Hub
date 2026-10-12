@@ -38,6 +38,16 @@ Notifications.setNotificationHandler({
   }),
 });
 
+if (Platform.OS === "android") {
+  Notifications.setNotificationChannelAsync("prayer-alerts", {
+    name: "Prayer Times & Adhan Alerts",
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: "#0D9373",
+    sound: "default",
+  }).catch(() => {});
+}
+
 export function usePrayerNotifications() {
   const [prefs, setPrefs] = useState<PrayerNotifPrefs>(DEFAULT_PREFS);
   const [permissionGranted, setPermissionGranted] = useState(false);
@@ -124,6 +134,7 @@ export function usePrayerNotifications() {
           title: `🕌 ${label.name} Prayer — ${label.arabic}`,
           body: `${label.name} prayer begins in ${p.minutesBefore} minutes. Time to prepare for Salah.`,
           sound: true,
+          channelId: "prayer-alerts",
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
