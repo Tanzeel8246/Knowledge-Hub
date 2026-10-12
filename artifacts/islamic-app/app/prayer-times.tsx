@@ -132,20 +132,57 @@ function buildWeeklyTable(lat: number, lng: number, methodId: string) {
   });
 }
 
-// ─── City search via open-meteo (free, no API key) ───────────────────────────
+const OFFLINE_CITIES: CityResult[] = [
+  { id: 1, name: "Karachi", country: "Pakistan", admin1: "Sindh", latitude: 24.8607, longitude: 67.0011 },
+  { id: 2, name: "Lahore", country: "Pakistan", admin1: "Punjab", latitude: 31.5204, longitude: 74.3587 },
+  { id: 3, name: "Islamabad", country: "Pakistan", admin1: "Federal Capital", latitude: 33.6844, longitude: 73.0479 },
+  { id: 4, name: "Rawalpindi", country: "Pakistan", admin1: "Punjab", latitude: 33.5651, longitude: 73.0169 },
+  { id: 5, name: "Faisalabad", country: "Pakistan", admin1: "Punjab", latitude: 31.4504, longitude: 73.1350 },
+  { id: 6, name: "Multan", country: "Pakistan", admin1: "Punjab", latitude: 30.1575, longitude: 71.5249 },
+  { id: 7, name: "Peshawar", country: "Pakistan", admin1: "KPK", latitude: 34.0151, longitude: 71.5249 },
+  { id: 8, name: "Quetta", country: "Pakistan", admin1: "Balochistan", latitude: 30.1798, longitude: 66.9750 },
+  { id: 9, name: "Gujranwala", country: "Pakistan", admin1: "Punjab", latitude: 32.1877, longitude: 74.1945 },
+  { id: 10, name: "Sialkot", country: "Pakistan", admin1: "Punjab", latitude: 32.4945, longitude: 74.5229 },
+  { id: 11, name: "Hyderabad", country: "Pakistan", admin1: "Sindh", latitude: 25.3960, longitude: 68.3578 },
+  { id: 12, name: "Bahawalpur", country: "Pakistan", admin1: "Punjab", latitude: 29.3544, longitude: 71.6911 },
+  { id: 13, name: "Makkah", country: "Saudi Arabia", admin1: "Makkah Province", latitude: 21.4225, longitude: 39.8262 },
+  { id: 14, name: "Madinah", country: "Saudi Arabia", admin1: "Al Madinah", latitude: 24.4672, longitude: 39.6108 },
+  { id: 15, name: "Deoband", country: "India", admin1: "Uttar Pradesh", latitude: 29.6958, longitude: 77.6766 },
+  { id: 16, name: "Delhi", country: "India", admin1: "Delhi", latitude: 28.7041, longitude: 77.1025 },
+  { id: 17, name: "Dhaka", country: "Bangladesh", admin1: "Dhaka Division", latitude: 23.8103, longitude: 90.4125 },
+  { id: 18, name: "Kabul", country: "Afghanistan", admin1: "Kabul", latitude: 34.5553, longitude: 69.2075 },
+  { id: 19, name: "Istanbul", country: "Turkey", admin1: "Istanbul", latitude: 41.0082, longitude: 28.9784 },
+  { id: 20, name: "London", country: "United Kingdom", admin1: "England", latitude: 51.5074, longitude: -0.1278 },
+];
 
 async function searchCities(query: string): Promise<CityResult[]> {
-  if (query.trim().length < 2) return [];
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+
+  // Offline match first
+  const offlineMatches = OFFLINE_CITIES.filter(
+    c => c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q) || (c.admin1 && c.admin1.toLowerCase().includes(q))
+  );
+
   try {
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en&format=json`;
     const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.results ?? [];
-  } catch { return []; }
+    if (res.ok) {
+      const data = await res.json();
+      const onlineResults: CityResult[] = data.results ?? [];
+      // Combine unique
+      const ids = new Set(onlineResults.map(r => r.name.toLowerCase()));
+      const filteredOffline = offlineMatches.filter(o => !ids.has(o.name.toLowerCase()));
+      return [...onlineResults, ...filteredOffline];
+    }
+  } catch {}
+
+  return offlineMatches;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const LAST_LOCATION_STORAGE_KEY = "@user_last_saved_location_v2";
 
 export default function PrayerTimesScreen() {
   const colors = useColors();
@@ -153,11 +190,11 @@ export default function PrayerTimesScreen() {
   const notif = usePrayerNotifications();
 
   const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState<{ lat: number; lng: number; city: string } | null>(null);
+  const [location, setLocation] = useState<{ lat: number; lng: number; city: string; isAutoGps?: boolean } | null>(null);
   const [prayers, setPrayers] = useState<PrayerEntry[]>([]);
   const [nextPrayer, setNextPrayer] = useState<PrayerEntry | null>(null);
   const [countdown, setCountdown] = useState("");
-  const [method, setMethod] = useState("MuslimWorldLeague");
+  const [method, setMethod] = useState("Karachi");
   const [showMethods, setShowMethods] = useState(false);
   const [tab, setTab] = useState<"today" | "week" | "settings">("today");
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -226,12 +263,15 @@ export default function PrayerTimesScreen() {
     setCountdown(formatCountdown(diff < 0 ? 0 : diff));
   }, []);
 
-  const applyLocation = useCallback((lat: number, lng: number, city: string, chosenMethod?: string) => {
+  const applyLocation = useCallback((lat: number, lng: number, city: string, chosenMethod?: string, isAutoGps: boolean = false) => {
     const m = chosenMethod ?? method;
     const list = buildPrayerList(lat, lng, m);
     setPrayers(list);
     updateNextPrayer(list);
-    setLocation({ lat, lng, city });
+    const locObj = { lat, lng, city, isAutoGps };
+    setLocation(locObj);
+    AsyncStorage.setItem(LAST_LOCATION_STORAGE_KEY, JSON.stringify(locObj)).catch(() => {});
+
     const weekly = buildWeeklyTable(lat, lng, m);
     setWeeklyData(weekly);
     // Schedule notifications with new times
@@ -242,25 +282,86 @@ export default function PrayerTimesScreen() {
 
   const loadAutoLocation = useCallback(async (chosenMethod?: string) => {
     setLoading(true);
+    let resolved = false;
+
+    // 1. First try native device GPS
     try {
       if (Platform.OS !== "web") {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") throw new Error("denied");
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const [geo] = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-        const city = [geo?.city, geo?.region, geo?.country].filter(Boolean).join(", ");
-        applyLocation(loc.coords.latitude, loc.coords.longitude, city || "Your Location", chosenMethod);
-      } else {
-        applyLocation(21.3891, 39.8579, "Makkah al-Mukarramah", chosenMethod);
+        if (status === "granted") {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          const [geo] = await Location.reverseGeocodeAsync({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+          const cityParts = [geo?.district || geo?.subregion || geo?.city, geo?.region, geo?.country].filter(Boolean);
+          const city = cityParts.join(", ") || "Current GPS Location";
+          applyLocation(loc.coords.latitude, loc.coords.longitude, city, chosenMethod, true);
+          resolved = true;
+        }
       }
     } catch {
-      applyLocation(21.3891, 39.8579, "Makkah al-Mukarramah (default)", chosenMethod);
-    } finally {
-      setLoading(false);
+      // GPS permission denied or hardware timeout
     }
+
+    // 2. If GPS not resolved, try IP-based geolocation fallback
+    if (!resolved) {
+      try {
+        const ipRes = await fetch("https://ipapi.co/json/");
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          if (ipData.latitude && ipData.longitude) {
+            const cityName = [ipData.city, ipData.region, ipData.country_name].filter(Boolean).join(", ");
+            applyLocation(parseFloat(ipData.latitude), parseFloat(ipData.longitude), cityName || "Detected Location", chosenMethod, true);
+            resolved = true;
+          }
+        }
+      } catch {
+        // Network offline
+      }
+    }
+
+    // 3. If still not resolved, check cached saved location
+    if (!resolved) {
+      try {
+        const saved = await AsyncStorage.getItem(LAST_LOCATION_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.lat && parsed.lng) {
+            applyLocation(parsed.lat, parsed.lng, parsed.city, chosenMethod, parsed.isAutoGps);
+            resolved = true;
+          }
+        }
+      } catch {}
+    }
+
+    // 4. Ultimate offline default (Karachi / Pakistan default)
+    if (!resolved) {
+      applyLocation(24.8607, 67.0011, "Karachi, Pakistan (Default)", chosenMethod, false);
+    }
+
+    setLoading(false);
   }, [applyLocation]);
 
-  useEffect(() => { loadAutoLocation(); }, []);
+  useEffect(() => {
+    // Check saved cache first for instant display without flash
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(LAST_LOCATION_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.lat && parsed.lng) {
+            applyLocation(parsed.lat, parsed.lng, parsed.city, undefined, parsed.isAutoGps);
+            setLoading(false);
+          }
+        }
+      } catch {}
+      // Then trigger fresh location update
+      loadAutoLocation();
+    })();
+  }, []);
 
   // Countdown ticker
   useEffect(() => {
@@ -396,8 +497,13 @@ export default function PrayerTimesScreen() {
           <Text style={s.gregorianDate}>{gregorianDate}</Text>
           {location && (
             <TouchableOpacity style={s.locationRow} onPress={() => setShowSearch(true)}>
-              <Feather name="map-pin" size={12} color="#FFFFFF70" />
+              <Feather name={location.isAutoGps ? "navigation" : "map-pin"} size={12} color={location.isAutoGps ? colors.gold : "#FFFFFF70"} />
               <Text style={s.locationText} numberOfLines={1}>{location.city}</Text>
+              {location.isAutoGps && (
+                <View style={{ backgroundColor: colors.gold + "30", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, marginLeft: 4 }}>
+                  <Text style={{ fontSize: 9, color: colors.gold, fontWeight: "700" }}>GPS/Live</Text>
+                </View>
+              )}
               <Feather name="chevron-down" size={11} color="#FFFFFF50" />
             </TouchableOpacity>
           )}

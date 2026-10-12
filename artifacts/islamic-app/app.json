@@ -14,10 +14,22 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": true
     },
     "android": {
-      "package": "com.tanzeel8246.islamicapp"
+      "package": "com.tanzeel8246.islamicapp",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0F5132"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "SCHEDULE_EXACT_ALARM",
+        "POST_NOTIFICATIONS",
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"

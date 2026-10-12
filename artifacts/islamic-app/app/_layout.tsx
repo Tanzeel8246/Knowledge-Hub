@@ -88,6 +88,7 @@ function RootLayoutNav() {
       <Stack.Screen name="research-suite" options={{ headerShown: false }} />
       <Stack.Screen name="spiritual-suite" options={{ headerShown: false }} />
       <Stack.Screen name="downloads" options={{ headerShown: false }} />
+      <Stack.Screen name="fatawa-archive" options={{ headerShown: false }} />
     </Stack>
   );
 }

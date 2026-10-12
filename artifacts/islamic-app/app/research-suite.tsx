@@ -64,6 +64,72 @@ const ROOTS_DATA: Record<string, any> = {
       { ref: "Al-Baqarah 2:153", ar: "يَا أَيُّهَا الَّذِينَ آمَنُوا اسْتَعِينُوا بِالصَّبْرِ وَالصَّلَاةِ", en: "Seek help through patience and prayer." },
     ],
   },
+  "رحم": {
+    root: "ر-ح-م",
+    translit: "R-H-M",
+    meaning: "Mercy, compassion, womb, kindness",
+    meaningUrdu: "رحمت، مہربانی، شفقت، رحم دلی",
+    occurrences: 563,
+    derivatives: [
+      { word: "رَحِمَ", form: "Rahima", meaning: "He had mercy" },
+      { word: "رَحْمَة", form: "Rahmah", meaning: "Mercy (Noun)" },
+      { word: "الرَّحْمَٰن", form: "Ar-Rahman", meaning: "The Entirely Merciful" },
+      { word: "الرَّحِيم", form: "Ar-Raheem", meaning: "The Especially Merciful" },
+      { word: "أَرْحَام", form: "Arham", meaning: "Wombs / Kinship (Plural)" },
+    ],
+    verses: [
+      { ref: "Al-Fatihah 1:1", ar: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", en: "In the name of Allah, the Entirely Merciful, the Especially Merciful." },
+      { ref: "Al-Anbiya 21:107", ar: "وَمَا أَرْسَلْنَاكَ إِلَّا رَحْمَةً لِّلْعَالَمِينَ", en: "And We have not sent you, [O Muhammad], except as a mercy to the worlds." },
+    ],
+  },
+  "عبد": {
+    root: "ع-ب-د",
+    translit: "‘A-B-D",
+    meaning: "Worship, servitude, slave of Allah, devotion",
+    meaningUrdu: "عبادت، بندگی، عاجزی، اطاعت",
+    occurrences: 275,
+    derivatives: [
+      { word: "عَبَدَ", form: "Abada", meaning: "He worshipped" },
+      { word: "عِبَادَة", form: "Ibadah", meaning: "Worship" },
+      { word: "عَبْد", form: "Abd", meaning: "Servant / Slave of Allah" },
+      { word: "عَابِد", form: "Abid", meaning: "Worshipper" },
+    ],
+    verses: [
+      { ref: "Al-Fatihah 1:5", ar: "إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ", en: "It is You we worship and You we ask for help." },
+      { ref: "Adh-Dhariyat 51:56", ar: "وَمَا خَلَقْتُ الْجِنَّ وَالْإِنسَ إِلَّا لِيَعْبُدُونِ", en: "And I did not create the jinn and mankind except to worship Me." },
+    ],
+  },
+  "هدی": {
+    root: "ه-د-ی",
+    translit: "H-D-Y",
+    meaning: "Guidance, directing to the straight path, gift",
+    meaningUrdu: "ہدایت، راہنمائی، سیدھی راہ دکھانا",
+    occurrences: 316,
+    derivatives: [
+      { word: "هَدَى", form: "Hada", meaning: "He guided" },
+      { word: "هُدًى", form: "Huda", meaning: "Guidance" },
+      { word: "مُهْتَدِين", form: "Muhtadeen", meaning: "The rightly guided" },
+    ],
+    verses: [
+      { ref: "Al-Fatihah 1:6", ar: "اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ", en: "Guide us to the straight path." },
+      { ref: "Al-Baqarah 2:2", ar: "ذَٰلِكَ الْكِتَابُ لَا رَيْبَ ۛ فِيهِ ۛ هُدًى لِّلْمُتَّقِينَ", en: "This is the Book about which there is no doubt, a guidance for those conscious of Allah." },
+    ],
+  },
+  "صلح": {
+    root: "ص-ل-ح",
+    translit: "S-L-H",
+    meaning: "Righteousness, reform, reconciliation, goodness",
+    meaningUrdu: "صلاح، نیکی، اصلاح، درستی، صلح",
+    occurrences: 180,
+    derivatives: [
+      { word: "صَلَحَ", form: "Salaha", meaning: "He was righteous" },
+      { word: "صَالِحَات", form: "Salihat", meaning: "Righteous deeds" },
+      { word: "مُصْلِحُون", form: "Muslihoon", meaning: "Reformers" },
+    ],
+    verses: [
+      { ref: "Al-Asr 103:3", ar: "إِلَّا الَّذِينَ آمَنُوا وَعَمِلُوا الصَّالِحَاتِ", en: "Except for those who have believed and done righteous deeds." },
+    ],
+  },
 };
 
 const TAFSIR_PRESETS = [
@@ -77,13 +143,35 @@ const TAFSIR_PRESETS = [
   {
     surah: "Al-Baqarah (2:153)",
     arabic: "يَا أَيُّهَا الَّذِينَ آمَنُوا اسْتَعِينُوا بِالصَّبْرِ وَالصَّلَاةِ ۚ إِنَّ اللَّهَ مَعَ الصَّابِرِينَ",
-    ibnKathir: "لما فرغ تعالى من بيان الأمر بالشكر شرع في بيان الصبر، والإرشاد إلى الاستعانة به وبالصلاة؛ فإن العبد إما أن يكون في نعمة فيشكر، أو في بلية فيصبر.",
+    ibnKathir: "لما فرغ تعالى من بيان الأمر بالشكر شرع في بیان الصبر، والإرشاد إلى الاستعانة به وبالصلاة؛ فإن العبد إما أن يكون في نعمة فيشكر، أو في بلية فيصبر.",
     maarifulQuran: "دنیاوی و اخروی مشکلات کے حل کے لیے دو عظیم نسخے بتائے گئے: صبر (نفس پر قابو رکھنا) اور نماز (روحانی تعلقِ مع اللہ)۔ صبر کرنے والے کو اللہ کی خصوصی معیت حاصل ہوتی ہے۔",
     jalalayn: "استعينوا بالصبر: على الطاعة والبلاء. والصلاة: خصها بالذكر لعظمها. إن الله مع الصابرين: بالعون والنصرة والتأييد.",
+  },
+  {
+    surah: "Ayat al-Kursi (2:255)",
+    arabic: "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ",
+    ibnKathir: "هذه آية الكرسي ولها شأن عظيم، وقد صح الحديث عن رسول الله ﷺ بأنها أعظم آية في كتاب الله. تشتمل على عشر جمل مستقلة في تقرير التوحيد والصفات الإلهية.",
+    maarifulQuran: "آیۃ الکرسی قرآن پاک کی سب سے عظیم ترین آیت ہے جس میں اللہ تعالیٰ کی توحید، حیاتِ کاملہ، قیومیت اور بے مثل قدرت کا مفصل اور جامع ترین بیان ہے۔",
+    jalalayn: "الله لا إله: لا معبود بحق في الوجود. إلا هو الحي: الباقي الدائم. القيوم: القائم بتدبير خلقه. لا تأخذه سنة: نعاس ولا نوم.",
+  },
+  {
+    surah: "Al-Ikhlas (112:1-2)",
+    arabic: "قُلْ هُوَ اللَّهُ أَحَدٌ ۝ اللَّهُ الصَّمَدُ",
+    ibnKathir: "الصمد هو السيد الذي كمل في سؤدده وشرفه، والذي تصمد الخلائق إليه في حوائجها ورغائبها. وهو الواحد الأحد الذي لا نظير له ولا وزير.",
+    maarifulQuran: "سورۃ الاخلاص ثلث قرآن (تہائی قرآن) کے برابر ہے۔ 'الصمد' وہ ذاتِ عالی ہے جو سب سے بے نیاز ہے اور تمام کائنات اپنی ہر چھوٹی بڑی حاجت میں اسی کی محتاج ہے۔",
+    jalalayn: "قل هو الله أحد: مبتدأ وخبر، أي واحد لا نظير له. الله الصمد: المقصود في الحوائج على الدوام، لا جوف له ولا يتجزأ.",
   },
 ];
 
 const NARRATORS_DATA = [
+  {
+    name: "Abdullah ibn Mas'ud ؓ",
+    nameArabic: "عبد الله بن مسعود الهذلي الحبر",
+    hadiths: 848,
+    tabaqah: "سابقون الأولون، فقيه الأمة ومؤسس فقه الكوفة",
+    verdict: "إمام الفقه والتفسير وأقرب الصحابة هدياً ودلاً بالرسول ﷺ",
+    bio: "The foundational authority of the Hanafi school of jurisprudence. Said by Umar (RA) to be a vessel filled with deep knowledge.",
+  },
   {
     name: "Abu Hurairah ؓ",
     nameArabic: "أبو هريرة عبد الرحمن بن صخر الدوسي",
@@ -107,6 +195,22 @@ const NARRATORS_DATA = [
     tabaqah: "صحابي، العبادلة الأربعة",
     verdict: "شديد الاتباع لآثار النبي ﷺ",
     bio: "Renowned for his meticulous observance of the Prophet's ﷺ precise Sunnah and pious asceticism.",
+  },
+  {
+    name: "Anas ibn Malik ؓ",
+    nameArabic: "أنس بن مالك الأنصاري خادم الرسول ﷺ",
+    hadiths: 2286,
+    tabaqah: "خادم رسول الله ﷺ لعشر سنين",
+    verdict: "مكثر في الرواية ومستجاب الدعوة",
+    bio: "Served the Prophet ﷺ with immense devotion for 10 years in Madinah. Narrated extensively on prophetic character and private manners.",
+  },
+  {
+    name: "Imam Abu Hanifah ؒ",
+    nameArabic: "الإمام الأعظم أبو حنيفة النعمان بن ثابت الكوفي",
+    hadiths: 1000,
+    tabaqah: "تابعي جليل وإمام أصحاب الرأي والفقهاء",
+    verdict: "فقيه الملة، قال الشافعي: الناس في الفقه عيال على أبي حنيفة",
+    bio: "The master jurist of Islam who met several Sahabah (Tabi'i), systematized Islamic jurisprudence through Shura, and founded the Hanafi school.",
   },
 ];
 

@@ -14,6 +14,9 @@ import { router } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const LAST_LOCATION_STORAGE_KEY = "@user_last_saved_location_v2";
 import { Magnetometer } from "expo-sensors";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -127,16 +130,37 @@ export default function QiblaScreen() {
         let lat = 24.8607;
         let lon = 67.0011;
         let city = "Karachi, PK";
+        let resolved = false;
 
+        // 1. Try GPS
         if (Platform.OS !== "web") {
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status === "granted") {
-            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-            lat = loc.coords.latitude;
-            lon = loc.coords.longitude;
-            const [geo] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-            city = geo?.city ?? geo?.region ?? "Your Location";
-          }
+          try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === "granted") {
+              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+              lat = loc.coords.latitude;
+              lon = loc.coords.longitude;
+              const [geo] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+              city = geo?.city ?? geo?.region ?? "Your Location";
+              resolved = true;
+            }
+          } catch {}
+        }
+
+        // 2. Fallback to cached location from prayer-times
+        if (!resolved) {
+          try {
+            const saved = await AsyncStorage.getItem(LAST_LOCATION_STORAGE_KEY);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed.lat && parsed.lng) {
+                lat = parsed.lat;
+                lon = parsed.lng;
+                city = parsed.city;
+                resolved = true;
+              }
+            }
+          } catch {}
         }
 
         setLocation({ lat, lon, city });
