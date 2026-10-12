@@ -169,15 +169,30 @@ export default function QiblaScreen() {
         updateSolarCalculations(lat, lon, qibla);
 
         if (Platform.OS !== "web") {
-          Magnetometer.setUpdateInterval(100);
+          Magnetometer.setUpdateInterval(60);
+          let filteredHeading = 0;
+          const alpha = 0.2; // Low-pass filter smoothing coefficient
+
           magSub = Magnetometer.addListener(({ x, y }) => {
-            let angle = Math.atan2(y, x) * (180 / Math.PI);
-            angle = (angle + 360) % 360;
+            // Correct device orientation heading:
+            // Top of device pointing North corresponds to atan2(-x, y)
+            let rawHeading = Math.atan2(-x, y) * (180 / Math.PI);
+            if (rawHeading < 0) {
+              rawHeading += 360;
+            }
+
+            // Angular smoothing (handling 0-360 wraparound)
+            let diff = rawHeading - filteredHeading;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            filteredHeading = (filteredHeading + alpha * diff + 360) % 360;
+
+            const angle = Math.round(filteredHeading * 10) / 10;
             setCompassAngle(angle);
 
             const relativeQibla = (qibla - angle + 360) % 360;
-            const diff = Math.abs(relativeQibla > 180 ? relativeQibla - 360 : relativeQibla);
-            setAligned(diff < 5);
+            const alignDiff = Math.abs(relativeQibla > 180 ? relativeQibla - 360 : relativeQibla);
+            setAligned(alignDiff < 6);
 
             animateRotation(compassAnim, prevCompass, -angle);
             animateRotation(needleAnim, prevNeedle, relativeQibla);
@@ -336,6 +351,17 @@ export default function QiblaScreen() {
               ? "Web view: Point your body toward the Kaaba angle indicated above"
               : "موبائل کو بالکل ہموار (Flat) رکھیں اور گھمائیں یہاں تک کہ خانہ کعبہ کا نشان اوپر آ جائے"}
           </Text>
+
+          {/* Calibration Notice Card */}
+          <View style={[s.calibrationTipCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <MaterialCommunityIcons name="rotate-3d-variant" size={18} color={colors.gold} />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.foreground }}>سینسَر کالیبریشن اور درستگی کی تصدیق</Text>
+            </View>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18, color: colors.mutedForeground }}>
+              اگر کمپاس سوئی جھول رہی ہو تو فون کو ہوا میں انگریزی ہندسے 8 کی شکل میں دو تین بار گھمائیں تاکہ میگنیٹک سنسر کالیبریٹ ہو جائے۔ اگر مقناطیسی مداخلت ہو تو &quot;سایۂ آفتاب&quot; ٹیب کا استعمال کریں جو 100٪ قطعی اور سائنسی طور پر غیر متزلزل ہے۔
+            </Text>
+          </View>
 
           {/* Degrees display */}
           <View style={[s.degreesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -541,7 +567,8 @@ function makeStyles(colors: any) {
     needle: { flex: 1, width: 3, borderRadius: 2 },
     needleTail: { width: 3, height: 40, borderRadius: 2, opacity: 0.4 },
     centerDot: { width: 14, height: 14, borderRadius: 7, zIndex: 10 },
-    instruction: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20, marginBottom: 20 },
+    instruction: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20, marginBottom: 12 },
+    calibrationTipCard: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 16, width: "100%" },
     degreesCard: { flexDirection: "row", borderRadius: 16, borderWidth: 1, overflow: "hidden", width: "100%" },
     degreeItem: { flex: 1, alignItems: "center", paddingVertical: 14, gap: 4 },
     degreeValue: { fontSize: 17, fontFamily: "Inter_700Bold" },

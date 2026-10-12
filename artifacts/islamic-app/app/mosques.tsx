@@ -16,130 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { useColors } from "@/hooks/useColors";
 
-interface MosqueItem {
-  id: string;
-  name: string;
-  arabicName?: string;
-  city: string;
-  address: string;
-  latitude: string;
-  longitude: string;
-  contactNumber?: string;
-  capacity?: number;
-  hasWuduArea: boolean;
-  hasLadiesArea: boolean;
-  hasWheelchairAccess: boolean;
-  fajrJamaat: string;
-  dhuhrJamaat: string;
-  asrJamaat: string;
-  maghribJamaat: string;
-  ishaJamaat: string;
-  jummahJamaat: string;
-  imamName?: string;
-}
-
-const DEFAULT_MOSQUES: MosqueItem[] = [
-  {
-    id: "faisal",
-    name: "Faisal Mosque (فیصل مسجد)",
-    arabicName: "مسجد الملك فيصل",
-    city: "Islamabad",
-    address: "Shah Faisal Ave, E-8, Islamabad",
-    latitude: "33.7297",
-    longitude: "73.0372",
-    capacity: 300000,
-    hasWuduArea: true,
-    hasLadiesArea: true,
-    hasWheelchairAccess: true,
-    fajrJamaat: "05:15",
-    dhuhrJamaat: "13:30",
-    asrJamaat: "17:00",
-    maghribJamaat: "18:45",
-    ishaJamaat: "20:30",
-    jummahJamaat: "13:45",
-    imamName: "Dr. Zia ur Rehman",
-  },
-  {
-    id: "badshahi",
-    name: "Badshahi Mosque (بادشاہی مسجد)",
-    arabicName: "مسجد بادشاهي",
-    city: "Lahore",
-    address: "Walled City, Lahore, Punjab",
-    latitude: "31.5881",
-    longitude: "74.3094",
-    capacity: 100000,
-    hasWuduArea: true,
-    hasLadiesArea: true,
-    hasWheelchairAccess: true,
-    fajrJamaat: "05:20",
-    dhuhrJamaat: "13:30",
-    asrJamaat: "17:15",
-    maghribJamaat: "18:50",
-    ishaJamaat: "20:30",
-    jummahJamaat: "14:00",
-    imamName: "Maulana Abdul Khabir Azad",
-  },
-  {
-    id: "tooba",
-    name: "Masjid e Tooba (مسجدِ طوبٰی)",
-    arabicName: "مسجد طوبى",
-    city: "Karachi",
-    address: "DHA Phase 2, Karachi",
-    latitude: "24.8465",
-    longitude: "67.0601",
-    capacity: 5000,
-    hasWuduArea: true,
-    hasLadiesArea: true,
-    hasWheelchairAccess: true,
-    fajrJamaat: "05:30",
-    dhuhrJamaat: "13:45",
-    asrJamaat: "17:15",
-    maghribJamaat: "18:55",
-    ishaJamaat: "20:45",
-    jummahJamaat: "14:15",
-    imamName: "Mufti Muhammad Asif",
-  },
-  {
-    id: "haram",
-    name: "Masjid al-Haram (مسجد الحرام مکہ)",
-    arabicName: "المسجد الحرام بمكة المكرمة",
-    city: "Makkah",
-    address: "Al Haram, Makkah",
-    latitude: "21.4225",
-    longitude: "39.8262",
-    capacity: 2500000,
-    hasWuduArea: true,
-    hasLadiesArea: true,
-    hasWheelchairAccess: true,
-    fajrJamaat: "05:10",
-    dhuhrJamaat: "12:30",
-    asrJamaat: "15:45",
-    maghribJamaat: "18:35",
-    ishaJamaat: "20:05",
-    jummahJamaat: "12:45",
-    imamName: "Sheikh Abdul Rahman Al-Sudais",
-  },
-  {
-    id: "nabawi",
-    name: "Al-Masjid an-Nabawi (مسجد نبوی مدینہ)",
-    arabicName: "المسجد النبوي الشريف بالمدينة",
-    city: "Madinah",
-    address: "Al Haram, Madinah",
-    latitude: "24.4672",
-    longitude: "39.6108",
-    capacity: 1000000,
-    hasWuduArea: true,
-    hasLadiesArea: true,
-    hasWheelchairAccess: true,
-    fajrJamaat: "05:15",
-    dhuhrJamaat: "12:30",
-    asrJamaat: "15:50",
-    maghribJamaat: "18:38",
-    ishaJamaat: "20:08",
-    jummahJamaat: "12:50",
-    imamName: "Sheikh Ali Al-Hudhaify",
-  },
-];
+import { EXPANDED_MOSQUES_DATA, MosqueItem } from "@/constants/mosquesData";
 
 // Distance calculation using Haversine formula
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -157,7 +34,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 export default function MosquesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const [mosques, setMosques] = useState<MosqueItem[]>(DEFAULT_MOSQUES);
+  const [mosques, setMosques] = useState<MosqueItem[]>(EXPANDED_MOSQUES_DATA);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedCity, setSelectedCity] = useState("all");
@@ -190,7 +67,7 @@ export default function MosquesScreen() {
         }
       }
     } catch {
-      // fallback to DEFAULT_MOSQUES
+      // fallback to EXPANDED_MOSQUES_DATA
     } finally {
       setLoading(false);
     }
@@ -203,6 +80,13 @@ export default function MosquesScreen() {
   const openDirections = (m: MosqueItem) => {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${m.latitude},${m.longitude}`;
     Linking.openURL(url).catch(() => {});
+  };
+
+  const openCurrentLocationInMaps = () => {
+    const query = userLocation
+      ? `https://www.google.com/maps/search/mosque/@${userLocation.lat},${userLocation.lng},14z`
+      : `https://www.google.com/maps/search/mosques+near+me`;
+    Linking.openURL(query).catch(() => {});
   };
 
   const filteredMosques = useMemo(() => {
@@ -226,7 +110,7 @@ export default function MosquesScreen() {
     });
   }, [mosques, search, selectedCity, userLocation]);
 
-  const cities = ["all", "Islamabad", "Lahore", "Karachi", "Makkah", "Madinah"];
+  const cities = ["all", "Islamabad", "Rawalpindi", "Lahore", "Karachi", "Peshawar", "Quetta", "Makkah", "Madinah", "Jerusalem"];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -261,6 +145,29 @@ export default function MosquesScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Live Google Maps search button */}
+        <TouchableOpacity
+          onPress={openCurrentLocationInMaps}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            backgroundColor: colors.primary + "18",
+            borderColor: colors.primary,
+            borderWidth: 1,
+            borderRadius: 10,
+            paddingVertical: 10,
+            marginTop: 8,
+            marginBottom: 4,
+          }}
+        >
+          <Feather name="navigation" size={15} color={colors.primary} />
+          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.primary }}>
+            گوگل میپس پر ارد گرد کی تمام مساجد دیکھیں (Find Live on Maps)
+          </Text>
+        </TouchableOpacity>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cityScroll}>
           {cities.map((c) => {

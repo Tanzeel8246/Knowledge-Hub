@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetBooks, useGetBookCategories } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 
+import { FALLBACK_BOOKS, Book } from "@/constants/booksData";
+
 export default function BooksScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -23,20 +25,39 @@ export default function BooksScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [language, setLanguage] = useState<"" | "en" | "ar" | "ur">("");
 
-  const { data: booksData, isLoading } = useGetBooks({
+  const { data: apiBooksData, isLoading: apiLoading } = useGetBooks({
     category: selectedCategory ?? undefined,
     language: language || undefined,
     limit: 50,
   });
   const { data: categories } = useGetBookCategories();
 
+  const allBooks = (apiBooksData?.books && apiBooksData.books.length > 0)
+    ? apiBooksData.books
+    : FALLBACK_BOOKS;
+
+  const filteredBooks = allBooks.filter((b: any) => {
+    const matchLang = !language || b.language === language;
+    const matchCat = !selectedCategory || b.category === selectedCategory;
+    const q = search.toLowerCase();
+    const matchSearch =
+      !q ||
+      b.title.toLowerCase().includes(q) ||
+      (b.titleArabic && b.titleArabic.includes(q)) ||
+      b.author.toLowerCase().includes(q) ||
+      (b.description && b.description.toLowerCase().includes(q));
+    return matchLang && matchCat && matchSearch;
+  });
+
+  const isLoading = apiLoading && (!allBooks || allBooks.length === 0);
+
   const s = makeStyles(colors);
 
   const langOptions: { label: string; value: "" | "en" | "ar" | "ur" }[] = [
-    { label: "All", value: "" },
+    { label: "تمام زبانیں", value: "" },
+    { label: "اردو (Urdu)", value: "ur" },
+    { label: "العربية (Arabic)", value: "ar" },
     { label: "English", value: "en" },
-    { label: "Arabic", value: "ar" },
-    { label: "Urdu", value: "ur" },
   ];
 
   return (
@@ -116,7 +137,7 @@ export default function BooksScreen() {
         <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={booksData?.books ?? []}
+          data={filteredBooks}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 100, paddingTop: 8 }}
           showsVerticalScrollIndicator={false}

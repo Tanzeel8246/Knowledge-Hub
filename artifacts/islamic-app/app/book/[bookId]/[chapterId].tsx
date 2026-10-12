@@ -16,6 +16,7 @@ import { useGetBookChapter, useCreateBookmark } from "@workspace/api-client-reac
 import { useColors } from "@/hooks/useColors";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
+import { FALLBACK_BOOKS } from "@/constants/booksData";
 
 export default function ChapterReaderScreen() {
   const colors = useColors();
@@ -28,6 +29,9 @@ export default function ChapterReaderScreen() {
   const queryClient = useQueryClient();
   const [fontSize, setFontSize] = useState(16);
 
+  const fallbackBook = FALLBACK_BOOKS.find(b => b.id === bookId);
+  const fallbackChapter = fallbackBook?.chapters.find(c => c.id === chapterId);
+
   useEffect(() => {
     if (bookId && chapterId) {
       getBookOffline<{ book: any; chapters: any[] }>(bookId).then(data => {
@@ -39,8 +43,8 @@ export default function ChapterReaderScreen() {
     }
   }, [bookId, chapterId]);
 
-  const chapter = offlineChapter ?? apiChapter;
-  const isLoading = !offlineChapter && apiLoading;
+  const chapter = offlineChapter ?? apiChapter ?? fallbackChapter;
+  const isLoading = !chapter && (!offlineChapter && apiLoading);
   const s = makeStyles(colors);
 
   const handleBookmark = async () => {

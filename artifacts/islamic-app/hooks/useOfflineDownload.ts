@@ -65,11 +65,39 @@ export function useOfflineDownload() {
     setItemProgress(key, 0);
     try {
       await ensureDir();
-      setItemProgress(key, 0.1);
-      const res = await fetch(`${BASE_URL}/api/quran/surahs/${surahNumber}`);
-      if (!res.ok) throw new Error("fetch failed");
+      let data: any = null;
+      try {
+        const res = await fetch(`${BASE_URL}/api/quran/surahs/${surahNumber}`);
+        if (res.ok) data = await res.json();
+      } catch {}
+
+      if (!data) {
+        // Fallback to open Quran API
+        const publicRes = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}/editions/quran-uthmani,ur.jalandhry,en.sahih`);
+        if (!publicRes.ok) throw new Error("fetch failed");
+        const jsonCloud = await publicRes.json();
+        const ar = jsonCloud.data[0];
+        const ur = jsonCloud.data[1];
+        const en = jsonCloud.data[2];
+        data = {
+          number: surahNumber,
+          nameArabic: ar.name,
+          nameTransliteration: ar.englishName,
+          nameEnglish: ar.englishNameTranslation,
+          revelationType: ar.revelationType,
+          totalAyahs: ar.numberOfAyahs,
+          ayahs: ar.ayahs.map((a: any, idx: number) => ({
+            numberInSurah: a.numberInSurah,
+            arabic: a.text,
+            translationUr: ur.ayahs[idx]?.text ?? "",
+            translationEn: en.ayahs[idx]?.text ?? "",
+            juzNumber: a.juz,
+            pageNumber: a.page,
+          })),
+        };
+      }
+
       setItemProgress(key, 0.5);
-      const data = await res.json();
       const json = JSON.stringify(data);
       setItemProgress(key, 0.8);
       const path = `${OFFLINE_DIR}${key}.json`;
