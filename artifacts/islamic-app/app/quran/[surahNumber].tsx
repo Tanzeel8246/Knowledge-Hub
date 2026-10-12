@@ -25,6 +25,8 @@ import { RECITERS, getAudioUrl, DEFAULT_RECITER, type Reciter } from "@/constant
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
+import { FALLBACK_SURAHS, SURAH_LIST } from "@/constants/quranData";
+
 const LAST_READ_KEY = "quran_last_read_v1";
 const FONT_SIZE_KEY = "quran_font_size_v1";
 
@@ -71,11 +73,15 @@ export default function SurahReaderScreen() {
   const [showAyahMenu, setShowAyahMenu] = useState<AyahItem | null>(null);
 
   const [downloading, setDownloading] = useState(false);
-  const [offlineSurah, setOfflineSurah] = useState<typeof apiSurah | null>(null);
+  const [offlineSurah, setOfflineSurah] = useState<any>(null);
+  const [publicFetchedSurah, setPublicFetchedSurah] = useState<any>(null);
+  const [isFetchingPublic, setIsFetchingPublic] = useState(false);
   const { getSurahOffline, downloadSurah, deleteDownload, getStatus, getSurahKey } = useOfflineDownload();
 
-  const surah = offlineSurah ?? apiSurah;
-  const isLoading = !offlineChecked || (!offlineSurah && apiLoading);
+  const fallbackData = FALLBACK_SURAHS[surahNum];
+  const meta = SURAH_LIST.find(s => s.number === surahNum);
+  const surah = offlineSurah ?? apiSurah ?? publicFetchedSurah ?? fallbackData;
+  const isLoading = !offlineChecked || (!surah && (apiLoading || isFetchingPublic));
   const surahOfflineKey = getSurahKey(surahNum);
   const offlineStatus = getStatus(surahOfflineKey);
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -116,11 +122,52 @@ export default function SurahReaderScreen() {
   }, []);
 
   useEffect(() => {
-    getSurahOffline<typeof apiSurah>(surahNum).then(data => {
-      if (data) setOfflineSurah(data);
-      setOfflineChecked(true);
+    getSurahOffline<any>(surahNum).then(async data => {
+      if (data) {
+        setOfflineSurah(data);
+        setOfflineChecked(true);
+      } else {
+        setOfflineChecked(true);
+        // If no offline data and no fallbackData, fetch from public open Quran CDN
+        if (!FALLBACK_SURAHS[surahNum] && !apiSurah) {
+          try {
+            setIsFetchingPublic(true);
+            const res = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/editions/quran-uthmani,ur.jalandhry,en.sahih`);
+            if (res.ok) {
+              const json = await res.json();
+              if (json.data && json.data.length >= 3) {
+                const arData = json.data[0];
+                const urData = json.data[1];
+                const enData = json.data[2];
+                const formattedAyahs = arData.ayahs.map((a: any, idx: number) => ({
+                  numberInSurah: a.numberInSurah,
+                  arabic: a.text,
+                  translationUr: urData.ayahs[idx]?.text ?? "",
+                  translationEn: enData.ayahs[idx]?.text ?? "",
+                  juzNumber: a.juz,
+                  pageNumber: a.page,
+                }));
+                const builtSurah = {
+                  number: surahNum,
+                  nameArabic: arData.name,
+                  nameTransliteration: arData.englishName,
+                  nameEnglish: arData.englishNameTranslation,
+                  revelationType: arData.revelationType === "Meccan" ? "Meccan" : "Medinan",
+                  totalAyahs: arData.numberOfAyahs,
+                  ayahs: formattedAyahs,
+                };
+                setPublicFetchedSurah(builtSurah);
+              }
+            }
+          } catch {
+            // Silently fall back to meta
+          } finally {
+            setIsFetchingPublic(false);
+          }
+        }
+      }
     });
-  }, [surahNum]);
+  }, [surahNum, apiSurah]);
 
   const playAyah = useCallback(async (index: number) => {
     if (!surah?.ayahs) return;

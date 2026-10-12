@@ -17,6 +17,8 @@ import { useGetSurahs } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
+import { SURAH_LIST } from "@/constants/quranData";
+
 const LAST_READ_KEY = "quran_last_read_v1";
 
 interface LastRead {
@@ -37,7 +39,9 @@ export default function QuranScreen() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "Meccan" | "Medinan">("all");
   const [lastRead, setLastRead] = useState<LastRead | null>(null);
-  const { data: surahs, isLoading } = useGetSurahs();
+  const { data: apiSurahs, isLoading: apiLoading } = useGetSurahs();
+  const surahs = (apiSurahs && apiSurahs.length > 0) ? apiSurahs : SURAH_LIST;
+  const isLoading = apiLoading && (!surahs || surahs.length === 0);
   const { isDownloaded, getStatus, getProgress, downloadSurah, getSurahKey } = useOfflineDownload();
 
   useEffect(() => {
