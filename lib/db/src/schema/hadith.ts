@@ -1,36 +1,37 @@
-import { pgTable, text, integer, uuid, index } from "drizzle-orm/pg-core";
+import { mysqlTable, text, varchar, int, index } from "drizzle-orm/mysql-core";
+import crypto from "crypto";
 
-export const hadithCollectionsTable = pgTable("hadith_collections", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  nameArabic: text("name_arabic").notNull(),
-  author: text("author").notNull(),
-  totalHadiths: integer("total_hadiths").notNull().default(0),
+export const hadithCollectionsTable = mysqlTable("hadith_collections", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  nameArabic: varchar("name_arabic", { length: 255 }).notNull(),
+  author: varchar("author", { length: 255 }).notNull(),
+  totalHadiths: int("total_hadiths").notNull().default(0),
   description: text("description"),
 });
 
-export const hadithBooksTable = pgTable("hadith_books", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  collectionId: text("collection_id").notNull().references(() => hadithCollectionsTable.id),
-  bookNumber: integer("book_number").notNull(),
-  nameArabic: text("name_arabic").notNull(),
-  nameEnglish: text("name_english").notNull(),
-  totalHadiths: integer("total_hadiths").notNull().default(0),
+export const hadithBooksTable = mysqlTable("hadith_books", {
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  collectionId: varchar("collection_id", { length: 64 }).notNull().references(() => hadithCollectionsTable.id),
+  bookNumber: int("book_number").notNull(),
+  nameArabic: varchar("name_arabic", { length: 255 }).notNull(),
+  nameEnglish: varchar("name_english", { length: 255 }).notNull(),
+  totalHadiths: int("total_hadiths").notNull().default(0),
 }, (table) => [
   index("hadith_books_collection_idx").on(table.collectionId),
 ]);
 
-export const hadithsTable = pgTable("hadiths", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  collectionId: text("collection_id").notNull().references(() => hadithCollectionsTable.id),
-  bookNumber: integer("book_number").notNull(),
-  hadithNumber: integer("hadith_number").notNull(),
+export const hadithsTable = mysqlTable("hadiths", {
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  collectionId: varchar("collection_id", { length: 64 }).notNull().references(() => hadithCollectionsTable.id),
+  bookNumber: int("book_number").notNull(),
+  hadithNumber: int("hadith_number").notNull(),
   arabic: text("arabic").notNull(),
   english: text("english").notNull(),
   urdu: text("urdu"),
-  narrator: text("narrator"),
-  grade: text("grade"),
-  reference: text("reference").notNull(),
+  narrator: varchar("narrator", { length: 255 }),
+  grade: varchar("grade", { length: 64 }),
+  reference: varchar("reference", { length: 255 }).notNull(),
 }, (table) => [
   index("hadiths_collection_book_idx").on(table.collectionId, table.bookNumber),
 ]);

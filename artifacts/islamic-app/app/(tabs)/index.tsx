@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetProgressDashboard } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Gregorian to Hijri (Kuwaiti algorithm)
 function gregorianToHijri(gYear: number, gMonth: number, gDay: number) {
@@ -90,8 +91,29 @@ export default function HomeScreen() {
     return "Good Evening";
   };
 
-  const today = new Date();
-  const hijri = gregorianToHijri(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  const [adjustment, setAdjustment] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    AsyncStorage.getItem("@app_settings").then(raw => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.hijriAdjustment === "number") setAdjustment(parsed.hijriAdjustment);
+        } catch {}
+      }
+    });
+  }, []);
+
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + adjustment);
+    return d;
+  }, [adjustment]);
+
+  const hijri = useMemo(() => {
+    return gregorianToHijri(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  }, [today]);
+
   const gregFormatted = today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   // Rotate verse daily (day of year as seed)
@@ -107,6 +129,8 @@ export default function HomeScreen() {
     { icon: "library", label: "Books", route: "/books", color: colors.primary },
     { icon: "school-outline", label: "Learn", route: "/learn", color: "#8B5CF6" },
     { icon: "mosque", label: "Prayer Times", route: "/prayer-times", color: "#0891B2" },
+    { icon: "map-marker-radius", label: "Mosques", route: "/mosques", color: "#0D9488" },
+    { icon: "baby-face-outline", label: "Kids Corner", route: "/kids-corner", color: "#F59E0B" },
     { icon: "counter", label: "Tasbih", route: "/tasbih", color: "#16A34A" },
     { icon: "compass", label: "Qibla", route: "/qibla", color: "#7C3AED" },
     { icon: "heart", label: "Duas", route: "/duas", color: "#DC2626" },
@@ -115,6 +139,9 @@ export default function HomeScreen() {
     { icon: "calendar-month", label: "Calendar", route: "/islamic-calendar", color: "#059669" },
     { icon: "notebook", label: "Workspace", route: "/(tabs)/workspace", color: "#6366F1" },
     { icon: "calculator", label: "Zakat", route: "/zakat-calculator", color: "#D97706" },
+    { icon: "scale-balance", label: "Inheritance", route: "/inheritance-calculator", color: "#B45309" },
+    { icon: "book-open-page-variant", label: "Research", route: "/research-suite", color: "#0D9488" },
+    { icon: "heart-pulse", label: "Tazkiyah", route: "/spiritual-suite", color: "#E11D48" },
     { icon: "check-circle", label: "Prayer Log", route: "/prayer-tracker", color: "#16A34A" },
     { icon: "help-circle", label: "Islamic Quiz", route: "/islamic-quiz", color: "#8B5CF6" },
     { icon: "weather-sunny", label: "Adhkar", route: "/adhkar", color: "#F59E0B" },
@@ -133,6 +160,33 @@ export default function HomeScreen() {
     { icon: "food-off", label: "Fasting", route: "/fasting-tracker", color: "#0891B2" },
     { icon: "download", label: "Downloads", route: "/downloads", color: "#16A34A" },
   ];
+
+  const [activeCategory, setActiveCategory] = React.useState<"all" | "worship" | "research" | "learning" | "tools">("all");
+
+  const categories = [
+    { id: "all", label: "تمام (All)" },
+    { id: "worship", label: "عبادات (Worship)" },
+    { id: "research", label: "تحقیق و کتب (Research)" },
+    { id: "learning", label: "تعلیم و تربیت (Learning)" },
+    { id: "tools", label: "ٹولز (Tools)" },
+  ] as const;
+
+  const filteredActions = useMemo(() => {
+    if (activeCategory === "all") return quickActions;
+    if (activeCategory === "worship") {
+      return quickActions.filter(a => ["Read Quran", "Prayer Times", "Tasbih", "Qibla", "Duas", "Prayer Log", "Adhkar", "Ramadan", "Fasting", "Mosques"].includes(a.label));
+    }
+    if (activeCategory === "research") {
+      return quickActions.filter(a => ["Hadith", "Books", "Search Quran", "Quran Juz", "Research", "History", "Prophets", "Seerah", "Glossary"].includes(a.label));
+    }
+    if (activeCategory === "learning") {
+      return quickActions.filter(a => ["Learn", "Kids Corner", "Islamic Quiz", "Hifz Tracker", "Salah Guide", "Arabic", "Wudu", "Tajweed", "Names"].includes(a.label));
+    }
+    if (activeCategory === "tools") {
+      return quickActions.filter(a => ["Calendar", "Workspace", "Zakat", "Inheritance", "Tazkiyah", "99 Names", "Downloads"].includes(a.label));
+    }
+    return quickActions;
+  }, [activeCategory, quickActions]);
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
@@ -215,10 +269,40 @@ export default function HomeScreen() {
           <Text style={[s.verseRef, { color: colors.gold }]}>— {dailyHadith.narrator}</Text>
         </TouchableOpacity>
 
-        {/* Quick Actions */}
-        <Text style={[s.sectionTitle, { color: colors.foreground }]}>Explore</Text>
+        {/* Quick Actions Header & Category Filters */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <Text style={[s.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Explore ({filteredActions.length})</Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 16 }}>
+          {categories.map(cat => (
+            <TouchableOpacity
+              key={cat.id}
+              onPress={() => setActiveCategory(cat.id as any)}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 20,
+                borderWidth: 1,
+                backgroundColor: activeCategory === cat.id ? colors.primary : colors.card,
+                borderColor: activeCategory === cat.id ? colors.primary : colors.border,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontFamily: "Inter_600SemiBold",
+                  color: activeCategory === cat.id ? colors.primaryForeground : colors.mutedForeground,
+                }}
+              >
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         <View style={s.quickActions}>
-          {quickActions.map(a => (
+          {filteredActions.map(a => (
             <TouchableOpacity
               key={a.label}
               style={[s.quickAction, { backgroundColor: colors.card, borderColor: colors.border }]}

@@ -11,6 +11,8 @@ export type PrayerKey = (typeof PRAYER_KEYS)[number];
 export interface PrayerNotifPrefs {
   enabled: Record<PrayerKey, boolean>;
   minutesBefore: number;
+  muezzin: string; // makkah, madinah, alaqsa, cairo, istanbul
+  playAudioAzan: boolean;
 }
 
 const DEFAULT_PREFS: PrayerNotifPrefs = {
@@ -22,6 +24,8 @@ const DEFAULT_PREFS: PrayerNotifPrefs = {
     isha: false,
   },
   minutesBefore: 10,
+  muezzin: "makkah",
+  playAudioAzan: true,
 };
 
 Notifications.setNotificationHandler({
@@ -134,6 +138,16 @@ export function usePrayerNotifications() {
     await Notifications.cancelAllScheduledNotificationsAsync();
   }, []);
 
+  const setMuezzin = useCallback(async (muezzinId: string) => {
+    const updated: PrayerNotifPrefs = { ...prefs, muezzin: muezzinId };
+    await savePrefs(updated);
+  }, [prefs]);
+
+  const togglePlayAudioAzan = useCallback(async () => {
+    const updated: PrayerNotifPrefs = { ...prefs, playAudioAzan: !prefs.playAudioAzan };
+    await savePrefs(updated);
+  }, [prefs]);
+
   const enabledCount = PRAYER_KEYS.filter(k => prefs.enabled[k]).length;
 
   return {
@@ -142,6 +156,8 @@ export function usePrayerNotifications() {
     loading,
     enabledCount,
     togglePrayer,
+    setMuezzin,
+    togglePlayAudioAzan,
     scheduleNotifications,
     cancelAll,
     requestPermission,

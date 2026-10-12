@@ -8,27 +8,21 @@ import {
   Animated,
   ActivityIndicator,
   Easing,
+  ScrollView,
 } from "react-native";
 import { router } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { Magnetometer } from "expo-sensors";
 import { useColors } from "@/hooks/useColors";
-
-function getQiblaDirection(lat: number, lon: number): number {
-  const kaabaLat = 21.4225;
-  const kaabaLon = 39.8262;
-  const dLon = ((kaabaLon - lon) * Math.PI) / 180;
-  const latRad = (lat * Math.PI) / 180;
-  const kaabaLatRad = (kaabaLat * Math.PI) / 180;
-  const y = Math.sin(dLon) * Math.cos(kaabaLatRad);
-  const x =
-    Math.cos(latRad) * Math.sin(kaabaLatRad) -
-    Math.sin(latRad) * Math.cos(kaabaLatRad) * Math.cos(dLon);
-  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
-  return (bearing + 360) % 360;
-}
+import {
+  calculateQiblaAzimuth,
+  calculateSolarPosition,
+  findSolarQiblaAlignmentTimes,
+  checkRasadAlQibla,
+  DailySolarQiblaAlignment,
+} from "@/utils/solarQibla";
 
 function getDistanceToKaaba(lat: number, lon: number): string {
   const kaabaLat = 21.4225;
@@ -53,11 +47,24 @@ export default function QiblaScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [qiblaAngle, setQiblaAngle] = useState(0);
   const [compassAngle, setCompassAngle] = useState(0);
   const [location, setLocation] = useState<{ lat: number; lon: number; city: string } | null>(null);
   const [aligned, setAligned] = useState(false);
+  const [activeTab, setActiveTab] = useState<"compass" | "solar">("compass");
+
+  // Solar calibration data
+  const [solarData, setSolarData] = useState<{
+    sunAzimuth: number;
+    sunAltitude: number;
+    angleDiff: number;
+    shadowAngle: number;
+    directTime: string | null;
+    shadowTime: string | null;
+    isShadowNow: boolean;
+    isDirectNow: boolean;
+    rasadInfo: { isToday: boolean; eventName?: string; timeUtc?: string };
+  } | null>(null);
 
   const compassAnim = useRef(new Animated.Value(0)).current;
   const needleAnim = useRef(new Animated.Value(0)).current;
@@ -97,14 +104,40 @@ export default function QiblaScreen() {
     }).start();
   };
 
+  const updateSolarCalculations = (lat: number, lon: number, qibla: number) => {
+    const now = new Date();
+    const pos = calculateSolarPosition(now, lat, lon);
+    const times = findSolarQiblaAlignmentTimes(now, lat, lon);
+    const rasad = checkRasadAlQibla(now);
+
+    let diff = Math.abs(pos.azimuth - qibla);
+    if (diff > 180) diff = 360 - diff;
+
+    const shadowAzimuth = (pos.azimuth + 180) % 360;
+    let shadowDiff = Math.abs(shadowAzimuth - qibla);
+    if (shadowDiff > 180) shadowDiff = 360 - shadowDiff;
+
+    setSolarData({
+      sunAzimuth: pos.azimuth,
+      sunAltitude: pos.altitude,
+      angleDiff: diff,
+      shadowAngle: shadowAzimuth,
+      directTime: times.directTime,
+      shadowTime: times.shadowTime,
+      isShadowNow: shadowDiff < 1.5 && pos.altitude >= 2,
+      isDirectNow: diff < 1.5 && pos.altitude >= 2,
+      rasadInfo: rasad,
+    });
+  };
+
   useEffect(() => {
     let magSub: any = null;
 
     const init = async () => {
       try {
-        let lat = 21.3891;
-        let lon = 39.8579;
-        let city = "Makkah (default)";
+        let lat = 24.8607;
+        let lon = 67.0011;
+        let city = "Karachi, PK";
 
         if (Platform.OS !== "web") {
           const { status } = await Location.requestForegroundPermissionsAsync();
@@ -118,8 +151,9 @@ export default function QiblaScreen() {
         }
 
         setLocation({ lat, lon, city });
-        const qibla = getQiblaDirection(lat, lon);
+        const qibla = calculateQiblaAzimuth(lat, lon);
         setQiblaAngle(qibla);
+        updateSolarCalculations(lat, lon, qibla);
 
         if (Platform.OS !== "web") {
           Magnetometer.setUpdateInterval(100);
@@ -141,7 +175,6 @@ export default function QiblaScreen() {
         }
         setLoading(false);
       } catch (e: any) {
-        setError("Could not determine location");
         setLoading(false);
       }
     };
@@ -149,6 +182,15 @@ export default function QiblaScreen() {
     init();
     return () => magSub?.remove();
   }, []);
+
+  // Periodic refresh of solar angles every minute
+  useEffect(() => {
+    if (!location) return;
+    const interval = setInterval(() => {
+      updateSolarCalculations(location.lat, location.lon, qiblaAngle);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [location, qiblaAngle]);
 
   const s = makeStyles(colors);
   const distance = location ? getDistanceToKaaba(location.lat, location.lon) : "-";
@@ -170,25 +212,50 @@ export default function QiblaScreen() {
           <Feather name="arrow-left" size={22} color="#FFF" />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Qibla Direction</Text>
-          <Text style={s.headerSub}>اتجاه القبلة</Text>
+          <Text style={s.headerTitle}>Qibla & Solar Alignment</Text>
+          <Text style={s.headerSub}>اتجاه القبلة وتصحيح ظل الشمس</Text>
         </View>
-        <View style={{ width: 22 }} />
+        <TouchableOpacity onPress={() => location && updateSolarCalculations(location.lat, location.lon, qiblaAngle)}>
+          <Feather name="refresh-cw" size={18} color="#FFF" />
+        </TouchableOpacity>
       </View>
 
+      {/* Tabs */}
+      <View style={[s.tabBar, { backgroundColor: colors.navy }]}>
+        <TouchableOpacity
+          style={[s.tabItem, activeTab === "compass" && s.tabItemActive]}
+          onPress={() => setActiveTab("compass")}
+        >
+          <MaterialCommunityIcons name="compass" size={18} color={activeTab === "compass" ? colors.gold : "#FFFFFF70"} />
+          <Text style={[s.tabText, activeTab === "compass" && { color: colors.gold, fontFamily: "Inter_700Bold" }]}>
+            Magnetic Compass
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.tabItem, activeTab === "solar" && s.tabItemActive]}
+          onPress={() => setActiveTab("solar")}
+        >
+          <MaterialCommunityIcons name="weather-sunny" size={18} color={activeTab === "solar" ? colors.gold : "#FFFFFF70"} />
+          <Text style={[s.tabText, activeTab === "solar" && { color: colors.gold, fontFamily: "Inter_700Bold" }]}>
+            سایۂ آفتاب (Solar Shadow)
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Info Bar */}
       <View style={[s.infoBar, { backgroundColor: colors.navy }]}>
         {location && (
           <View style={s.infoItem}>
-            <Feather name="map-pin" size={14} color="#FFFFFF80" />
+            <Feather name="map-pin" size={13} color="#FFFFFF80" />
             <Text style={s.infoText}>{location.city}</Text>
           </View>
         )}
         <View style={s.infoItem}>
-          <Feather name="navigation" size={14} color={colors.gold} />
-          <Text style={[s.infoText, { color: colors.gold }]}>{qiblaAngle.toFixed(1)}° from North</Text>
+          <Feather name="navigation" size={13} color={colors.gold} />
+          <Text style={[s.infoText, { color: colors.gold }]}>Qibla: {qiblaAngle.toFixed(1)}°</Text>
         </View>
         <View style={s.infoItem}>
-          <Feather name="globe" size={14} color="#FFFFFF80" />
+          <Feather name="globe" size={13} color="#FFFFFF80" />
           <Text style={s.infoText}>{distance} to Kaaba</Text>
         </View>
       </View>
@@ -196,21 +263,20 @@ export default function QiblaScreen() {
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={[s.loadingText, { color: colors.mutedForeground }]}>Getting your location...</Text>
+          <Text style={[s.loadingText, { color: colors.mutedForeground }]}>Calculating exact astronomical coordinates...</Text>
         </View>
-      ) : (
-        <View style={s.compassSection}>
+      ) : activeTab === "compass" ? (
+        <ScrollView contentContainerStyle={s.compassSection}>
           {aligned && (
             <View style={[s.alignedBanner, { backgroundColor: "#22C55E20", borderColor: "#22C55E" }]}>
               <Feather name="check-circle" size={16} color="#22C55E" />
-              <Text style={s.alignedText}>Facing Qibla!</Text>
+              <Text style={s.alignedText}>Facing Qibla! (قبلہ کی سمت درست ہے)</Text>
             </View>
           )}
 
-          {/* Compass */}
+          {/* Compass Graphic */}
           <View style={s.compassOuter}>
             <Animated.View style={[s.compassRose, { transform: [{ rotate: Platform.OS === "web" ? "0deg" : compassRotation }] }]}>
-              {/* Cardinal directions */}
               {["N", "E", "S", "W"].map((dir, i) => (
                 <View
                   key={dir}
@@ -219,7 +285,6 @@ export default function QiblaScreen() {
                   <Text style={[s.cardinalText, dir === "N" && { color: "#EF4444", fontFamily: "Inter_700Bold" }]}>{dir}</Text>
                 </View>
               ))}
-              {/* Tick marks */}
               {Array.from({ length: 36 }, (_, i) => (
                 <View
                   key={i}
@@ -257,15 +322,15 @@ export default function QiblaScreen() {
           {/* Instruction */}
           <Text style={[s.instruction, { color: colors.mutedForeground }]}>
             {Platform.OS === "web"
-              ? "Rotate your device toward the Kaaba icon above"
-              : "Hold your device flat and rotate until the Kaaba icon points away from you"}
+              ? "Web view: Point your body toward the Kaaba angle indicated above"
+              : "موبائل کو بالکل ہموار (Flat) رکھیں اور گھمائیں یہاں تک کہ خانہ کعبہ کا نشان اوپر آ جائے"}
           </Text>
 
           {/* Degrees display */}
           <View style={[s.degreesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={s.degreeItem}>
               <Text style={[s.degreeValue, { color: colors.gold }]}>{qiblaAngle.toFixed(1)}°</Text>
-              <Text style={[s.degreeLabel, { color: colors.mutedForeground }]}>Qibla Direction</Text>
+              <Text style={[s.degreeLabel, { color: colors.mutedForeground }]}>Qibla Azimuth</Text>
             </View>
             <View style={[s.degreeDivider, { backgroundColor: colors.border }]} />
             <View style={s.degreeItem}>
@@ -278,7 +343,130 @@ export default function QiblaScreen() {
               <Text style={[s.degreeLabel, { color: colors.mutedForeground }]}>Distance</Text>
             </View>
           </View>
-        </View>
+        </ScrollView>
+      ) : (
+        /* ─── Solar & Shadow-based Qibla Calibration Tab ─── */
+        <ScrollView style={s.solarContainer} contentContainerStyle={{ paddingBottom: 40 }}>
+          {/* Rasad al-Qibla Notice */}
+          {solarData?.rasadInfo.isToday && (
+            <View style={[s.rasadCard, { backgroundColor: "#FEF08A25", borderColor: "#EAB308" }]}>
+              <MaterialCommunityIcons name="star-shooting" size={24} color="#EAB308" />
+              <View style={{ flex: 1 }}>
+                <Text style={s.rasadTitle}>مبارک دن: {solarData.rasadInfo.eventName}</Text>
+                <Text style={s.rasadSub}>
+                  آج سورج ٹھیک خانہ کعبہ کے اوپر (Zenith) ہے۔ {solarData.rasadInfo.timeUtc} پر دنیا کے جس حصے میں بھی سورج نظر آ رہا ہو، اس کا رخ براہ راست قبلہ کی جانب ہے!
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Solar Status Card */}
+          <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={s.cardHeader}>
+              <MaterialCommunityIcons name="weather-sunny" size={22} color="#F59E0B" />
+              <Text style={[s.cardTitle, { color: colors.foreground }]}>سورج کا موجودہ زاویہ اور سایہ</Text>
+            </View>
+
+            <View style={s.gridRow}>
+              <View style={s.gridCol}>
+                <Text style={[s.colVal, { color: "#F59E0B" }]}>{solarData?.sunAzimuth.toFixed(1)}°</Text>
+                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>سورج کا رخ (Azimuth)</Text>
+              </View>
+              <View style={s.gridCol}>
+                <Text style={[s.colVal, { color: colors.primary }]}>{solarData?.sunAltitude.toFixed(1)}°</Text>
+                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>بلندی (Altitude)</Text>
+              </View>
+              <View style={s.gridCol}>
+                <Text style={[s.colVal, { color: colors.gold }]}>{solarData?.shadowAngle.toFixed(1)}°</Text>
+                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>سائے کا رخ (Shadow)</Text>
+              </View>
+            </View>
+
+            <View style={[s.diffBadge, { backgroundColor: (solarData?.angleDiff ?? 99) < 2 ? "#22C55E20" : colors.muted }]}>
+              <Feather
+                name={(solarData?.angleDiff ?? 99) < 2 ? "check-circle" : "compass"}
+                size={14}
+                color={(solarData?.angleDiff ?? 99) < 2 ? "#22C55E" : colors.mutedForeground}
+              />
+              <Text style={[s.diffText, { color: (solarData?.angleDiff ?? 99) < 2 ? "#22C55E" : colors.foreground }]}>
+                قبلہ سے سورج کا فاصلہ: {solarData?.angleDiff.toFixed(1)}°
+              </Text>
+            </View>
+          </View>
+
+          {/* Daily Alignment Times */}
+          <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={s.cardHeader}>
+              <MaterialCommunityIcons name="clock-outline" size={22} color={colors.primary} />
+              <Text style={[s.cardTitle, { color: colors.foreground }]}>آج کا سورج و سایہ سے قبلہ وقت</Text>
+            </View>
+
+            <View style={s.timingRow}>
+              <View style={s.timingIconCircle}>
+                <MaterialCommunityIcons name="ray-start-arrow" size={20} color="#F59E0B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.timingLabel, { color: colors.foreground }]}>سائے کی سیدھ سے قبلہ (بہترین طریقہ)</Text>
+                <Text style={[s.timingDesc, { color: colors.mutedForeground }]}>
+                  اس وقت عمودی لکڑی کا سایہ عین قبلہ کی مخالف سمت پڑے گا، یعنی سایہ دیکھ کر قبلہ متعین کریں:
+                </Text>
+              </View>
+              <View style={[s.timeBox, { backgroundColor: colors.navy }]}>
+                <Text style={s.timeBoxText}>{solarData?.shadowTime ?? "سایہ نہیں"}</Text>
+              </View>
+            </View>
+
+            <View style={[s.timingRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 }]}>
+              <View style={s.timingIconCircle}>
+                <MaterialCommunityIcons name="weather-sunny" size={20} color={colors.gold} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.timingLabel, { color: colors.foreground }]}>براہِ راست سورج سے قبلہ</Text>
+                <Text style={[s.timingDesc, { color: colors.mutedForeground }]}>
+                  اس وقت سورج کا رخ خود قبلہ کی ڈائریکشن میں ہوگا:
+                </Text>
+              </View>
+              <View style={[s.timeBox, { backgroundColor: colors.navy }]}>
+                <Text style={s.timeBoxText}>{solarData?.directTime ?? "اس دن نہیں"}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Practical Method Step-by-Step */}
+          <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={s.cardHeader}>
+              <Feather name="help-circle" size={20} color={colors.gold} />
+              <Text style={[s.cardTitle, { color: colors.foreground }]}>سورج کے سائے سے قبلہ درست کرنے کا شرعی طریقہ</Text>
+            </View>
+
+            <View style={s.stepItem}>
+              <View style={[s.stepNum, { backgroundColor: colors.gold }]}>
+                <Text style={s.stepNumText}>۱</Text>
+              </View>
+              <Text style={[s.stepText, { color: colors.foreground }]}>
+                اوپر دیئے گئے مقررہ وقت پر ایک ہموار اور دھوپ والی زمین پر بالکل سیدھی لکڑی یا شاقول (Plumb line) زمین میں 90 ڈگری پر کھڑی کریں۔
+              </Text>
+            </View>
+
+            <View style={s.stepItem}>
+              <View style={[s.stepNum, { backgroundColor: colors.gold }]}>
+                <Text style={s.stepNumText}>۲</Text>
+              </View>
+              <Text style={[s.stepText, { color: colors.foreground }]}>
+                ٹھیک وقت پر لکڑی کے سائے کے آخری سرے سے لکڑی کی بنیاد کی طرف لکیر کھینچیں۔ یہ خط سیدھا قبلہ کی طرف اشارہ کرتا ہے۔
+              </Text>
+            </View>
+
+            <View style={s.stepItem}>
+              <View style={[s.stepNum, { backgroundColor: colors.gold }]}>
+                <Text style={s.stepNumText}>۳</Text>
+              </View>
+              <Text style={[s.stepText, { color: colors.foreground }]}>
+                یہ طریقہ قطب نما (Compass) میں لوہے یا برقی آلات کی مقناطیسی خرابی (Magnetic Deviation) سے 100% محفوظ اور یقینی ترین فلکیاتی طریقہ ہے۔
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -287,19 +475,26 @@ export default function QiblaScreen() {
 function makeStyles(colors: any) {
   return StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16, gap: 12 },
+    header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 12, gap: 12 },
     headerCenter: { flex: 1, alignItems: "center" },
-    headerTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: "#FFF" },
-    headerSub: { fontSize: 13, color: "#FFFFFF80" },
-    infoBar: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 16, paddingBottom: 16, flexWrap: "wrap", gap: 8 },
+    headerTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#FFF" },
+    headerSub: { fontSize: 12, color: "#FFFFFF80" },
+    tabBar: { flexDirection: "row", paddingHorizontal: 16, paddingBottom: 8, gap: 10 },
+    tabItem: {
+      flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+      gap: 6, paddingVertical: 8, borderRadius: 10, backgroundColor: "#FFFFFF15",
+    },
+    tabItemActive: { backgroundColor: "#FFFFFF30" },
+    tabText: { fontSize: 12, color: "#FFFFFF80", fontFamily: "Inter_500Medium" },
+    infoBar: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 16, paddingBottom: 14, flexWrap: "wrap", gap: 8 },
     infoItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-    infoText: { fontSize: 12, color: "#FFFFFF80", fontFamily: "Inter_400Regular" },
+    infoText: { fontSize: 11, color: "#FFFFFF80", fontFamily: "Inter_400Regular" },
     center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-    loadingText: { fontSize: 15, fontFamily: "Inter_400Regular" },
-    compassSection: { flex: 1, alignItems: "center", paddingTop: 20, paddingHorizontal: 20 },
-    alignedBanner: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, borderWidth: 1.5, marginBottom: 16 },
-    alignedText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#22C55E" },
-    compassOuter: { width: 260, height: 260, alignItems: "center", justifyContent: "center", marginBottom: 24 },
+    loadingText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+    compassSection: { alignItems: "center", paddingTop: 16, paddingHorizontal: 20, paddingBottom: 40 },
+    alignedBanner: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, marginBottom: 16 },
+    alignedText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#22C55E" },
+    compassOuter: { width: 260, height: 260, alignItems: "center", justifyContent: "center", marginBottom: 20 },
     compassRose: { position: "absolute", width: 240, height: 240, alignItems: "center", justifyContent: "center" },
     cardinal: { position: "absolute", alignItems: "center" },
     cardinalText: { fontSize: 16, fontFamily: "Inter_700Bold", color: colors.foreground },
@@ -316,8 +511,33 @@ function makeStyles(colors: any) {
     instruction: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20, marginBottom: 20 },
     degreesCard: { flexDirection: "row", borderRadius: 16, borderWidth: 1, overflow: "hidden", width: "100%" },
     degreeItem: { flex: 1, alignItems: "center", paddingVertical: 14, gap: 4 },
-    degreeValue: { fontSize: 18, fontFamily: "Inter_700Bold" },
+    degreeValue: { fontSize: 17, fontFamily: "Inter_700Bold" },
     degreeLabel: { fontSize: 10, fontFamily: "Inter_400Regular", textAlign: "center" },
     degreeDivider: { width: 1 },
+
+    // Solar Styles
+    solarContainer: { flex: 1, padding: 16 },
+    rasadCard: { flexDirection: "row", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 14, alignItems: "center" },
+    rasadTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#EAB308", marginBottom: 4 },
+    rasadSub: { fontSize: 12, color: colors.foreground, lineHeight: 18 },
+    card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 14 },
+    cardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
+    cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+    gridRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
+    gridCol: { flex: 1, alignItems: "center" },
+    colVal: { fontSize: 18, fontFamily: "Inter_700Bold" },
+    colLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 4 },
+    diffBadge: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, borderRadius: 8 },
+    diffText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+    timingRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+    timingIconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#00000010", alignItems: "center", justifyContent: "center" },
+    timingLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+    timingDesc: { fontSize: 11, lineHeight: 16, marginTop: 2 },
+    timeBox: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+    timeBoxText: { color: "#FFF", fontSize: 13, fontFamily: "Inter_700Bold" },
+    stepItem: { flexDirection: "row", gap: 10, marginBottom: 12, alignItems: "flex-start" },
+    stepNum: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+    stepNumText: { color: "#FFF", fontSize: 11, fontFamily: "Inter_700Bold" },
+    stepText: { flex: 1, fontSize: 12, lineHeight: 18 },
   });
 }

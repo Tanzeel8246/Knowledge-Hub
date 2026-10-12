@@ -70,7 +70,8 @@ router.post("/admin/books", requireAdmin, async (req, res) => {
     res.status(400).json({ message: "Invalid request body" });
     return;
   }
-  const [book] = await db.insert(booksTable).values(parsed.data).returning();
+  const insertResult = await db.insert(booksTable).values(parsed.data);
+  const [book] = await db.select().from(booksTable).where(eq(booksTable.id, insertResult[0].insertId)).limit(1);
   res.status(201).json({ ...book, chapters: [] });
 });
 
@@ -80,8 +81,9 @@ router.patch("/admin/books/:bookId", requireAdmin, async (req, res) => {
     res.status(400).json({ message: "Invalid request body" });
     return;
   }
-  const [book] = await db.update(booksTable).set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(booksTable.id, req.params.bookId)).returning();
+  await db.update(booksTable).set({ ...parsed.data, updatedAt: new Date() })
+    .where(eq(booksTable.id, req.params.bookId));
+  const [book] = await db.select().from(booksTable).where(eq(booksTable.id, req.params.bookId)).limit(1);
   if (!book) {
     res.status(404).json({ message: "Book not found" });
     return;
@@ -100,7 +102,8 @@ router.post("/admin/learning-paths", requireAdmin, async (req, res) => {
     res.status(400).json({ message: "Invalid request body" });
     return;
   }
-  const [path] = await db.insert(learningPathsTable).values({ ...parsed.data, estimatedHours: String(parsed.data.estimatedHours) }).returning();
+  const insertResult = await db.insert(learningPathsTable).values({ ...parsed.data, estimatedHours: String(parsed.data.estimatedHours) });
+  const [path] = await db.select().from(learningPathsTable).where(eq(learningPathsTable.id, insertResult[0].insertId)).limit(1);
   res.status(201).json({ ...path, lessons: [] });
 });
 
@@ -112,8 +115,9 @@ router.patch("/admin/learning-paths/:pathId", requireAdmin, async (req, res) => 
   }
   const updateData: Record<string, any> = { ...parsed.data };
   if (parsed.data.estimatedHours !== undefined) updateData.estimatedHours = String(parsed.data.estimatedHours);
-  const [path] = await db.update(learningPathsTable).set(updateData)
-    .where(eq(learningPathsTable.id, req.params.pathId)).returning();
+  await db.update(learningPathsTable).set(updateData)
+    .where(eq(learningPathsTable.id, req.params.pathId));
+  const [path] = await db.select().from(learningPathsTable).where(eq(learningPathsTable.id, req.params.pathId)).limit(1);
   if (!path) {
     res.status(404).json({ message: "Learning path not found" });
     return;
@@ -137,7 +141,7 @@ async function seedIslamicContent() {
       { id: "tirmidhi", name: "Jami at-Tirmidhi", nameArabic: "جامع الترمذي", author: "Imam Tirmidhi", totalHadiths: 3956 },
       { id: "nasai", name: "Sunan an-Nasa'i", nameArabic: "سنن النسائي", author: "Imam an-Nasa'i", totalHadiths: 5761 },
       { id: "ibnmajah", name: "Sunan Ibn Majah", nameArabic: "سنن ابن ماجه", author: "Ibn Majah", totalHadiths: 4341 },
-    ]).onConflictDoNothing();
+    ]).onDuplicateKeyUpdate({ set: { id: sql`id` } });
 
     await db.insert(hadithBooksTable).values([
       { collectionId: "bukhari", bookNumber: 1, nameArabic: "كتاب الوحي", nameEnglish: "Book of Revelation", totalHadiths: 7 },
@@ -177,16 +181,18 @@ async function seedIslamicContent() {
   // Seed Book Categories
   const existingCats = await db.select().from(bookCategoriesTable).limit(1);
   if (existingCats.length === 0) {
-    const [aqeedah, fiqh, tafsir, seerah, ethics, hadithCat] = await db.insert(bookCategoriesTable).values([
+    await db.insert(bookCategoriesTable).values([
       { name: "Aqeedah (Theology)", nameArabic: "العقيدة", sortOrder: 1 },
       { name: "Fiqh (Islamic Law)", nameArabic: "الفقه", sortOrder: 2 },
       { name: "Tafsir (Quranic Commentary)", nameArabic: "التفسير", sortOrder: 3 },
       { name: "Seerah (Biography of the Prophet)", nameArabic: "السيرة النبوية", sortOrder: 4 },
       { name: "Islamic Ethics & Spirituality", nameArabic: "الأخلاق والتزكية", sortOrder: 5 },
       { name: "Hadith Sciences", nameArabic: "علوم الحديث", sortOrder: 6 },
-    ]).returning();
+    ]);
+    const cats = await db.select().from(bookCategoriesTable).orderBy(bookCategoriesTable.sortOrder);
+    const [aqeedah, fiqh, tafsir, seerah, ethics, hadithCat] = cats;
 
-    const [book1, book2, book3] = await db.insert(booksTable).values([
+    await db.insert(booksTable).values([
       {
         title: "Kitab al-Tawheed",
         titleArabic: "كتاب التوحيد",
@@ -222,7 +228,9 @@ async function seedIslamicContent() {
         isPublic: true,
         publishedYear: 1275,
       },
-    ]).returning();
+    ]);
+    const bks = await db.select().from(booksTable).limit(3);
+    const [book1, book2, book3] = bks;
 
     await db.insert(bookChaptersTable).values([
       { bookId: book1.id, chapterNumber: 1, title: "The Excellence of Tawheed and What it Removes of Sin", titleArabic: "باب فضل التوحيد وما يكفر من الذنوب", content: "Allah the Almighty said: 'It is those who believe and confuse not their belief with wrong (worshipping others besides Allah) — for them is security and they are the rightly guided.' (6:82)\n\nThis verse indicates that whoever believes in Allah and does not mix their faith with shirk (polytheism) will achieve security and guidance. The Prophet (PBUH) clarified this verse when his companions asked about it, explaining that 'wrong' here means shirk." },
@@ -234,7 +242,7 @@ async function seedIslamicContent() {
   // Seed Learning Paths
   const existingPaths = await db.select().from(learningPathsTable).limit(1);
   if (existingPaths.length === 0) {
-    const paths = await db.insert(learningPathsTable).values([
+    await db.insert(learningPathsTable).values([
       {
         title: "Foundations of Islamic Faith",
         description: "A comprehensive introduction to the core beliefs of Islam — the six pillars of Iman, the five pillars of Islam, and the fundamentals of Aqeedah.",
@@ -275,7 +283,8 @@ async function seedIslamicContent() {
         totalLessons: 15,
         estimatedHours: "25",
       },
-    ]).returning();
+    ]);
+    const paths = await db.select().from(learningPathsTable).limit(5);
 
     await db.insert(lessonsTable).values([
       {
@@ -324,7 +333,7 @@ async function seedIslamicContent() {
       { number: 8, surahNumber: 2, numberInSurah: 1, arabic: "الٓمٓ", translationEn: "Alif, Lam, Meem.", juzNumber: 1, pageNumber: 2 },
       { number: 9, surahNumber: 2, numberInSurah: 2, arabic: "ذَٰلِكَ الْكِتَابُ لَا رَيْبَ ۛ فِيهِ ۛ هُدًى لِّلْمُتَّقِينَ", translationEn: "This is the Book about which there is no doubt, a guidance for those conscious of Allah -", translationUr: "یہ وہ کتاب ہے جس میں کوئی شک نہیں، پرہیزگاروں کے لیے ہدایت ہے۔", juzNumber: 1, pageNumber: 2 },
       { number: 10, surahNumber: 2, numberInSurah: 3, arabic: "الَّذِينَ يُؤْمِنُونَ بِالْغَيْبِ وَيُقِيمُونَ الصَّلَاةَ وَمِمَّا رَزَقْنَاهُمْ يُنفِقُونَ", translationEn: "Who believe in the unseen, establish prayer, and spend out of what We have provided for them,", juzNumber: 1, pageNumber: 2 },
-    ]).onConflictDoNothing();
+    ]).onDuplicateKeyUpdate({ set: { number: sql`number` } });
   }
 
   // Create a default admin user

@@ -16,7 +16,9 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "package": "com.tanzeel8246.islamicapp"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -31,8 +33,12 @@
       "expo-web-browser"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e6b44042-4c54-4101-8edd-c66e3d404e95"
+      }
     }
   }
 }

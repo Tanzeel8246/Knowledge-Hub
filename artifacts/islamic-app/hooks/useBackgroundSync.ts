@@ -90,6 +90,9 @@ export function useBackgroundSync(): SyncState {
           } else if (rec.type === "hadith_collection") {
             const id = key.replace("hadith_collection_", "");
             url = `${BASE_URL}/api/hadith/collections/${id}/download`;
+          } else if (rec.type === "islamic_book") {
+            const id = key.replace("islamic_book_", "");
+            url = `${BASE_URL}/api/books/${id}/download`;
           }
           if (!url) continue;
 

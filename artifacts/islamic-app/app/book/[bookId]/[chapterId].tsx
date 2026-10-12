@@ -15,16 +15,32 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetBookChapter, useCreateBookmark } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useQueryClient } from "@tanstack/react-query";
+import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
 export default function ChapterReaderScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { bookId, chapterId } = useLocalSearchParams<{ bookId: string; chapterId: string }>();
-  const { data: chapter, isLoading } = useGetBookChapter(bookId, chapterId);
+  const { data: apiChapter, isLoading: apiLoading } = useGetBookChapter(bookId, chapterId);
+  const [offlineChapter, setOfflineChapter] = useState<any>(null);
+  const { getBookOffline } = useOfflineDownload();
   const createBookmark = useCreateBookmark();
   const queryClient = useQueryClient();
   const [fontSize, setFontSize] = useState(16);
 
+  useEffect(() => {
+    if (bookId && chapterId) {
+      getBookOffline<{ book: any; chapters: any[] }>(bookId).then(data => {
+        if (data?.chapters) {
+          const found = data.chapters.find((c: any) => c.id === chapterId);
+          if (found) setOfflineChapter(found);
+        }
+      });
+    }
+  }, [bookId, chapterId]);
+
+  const chapter = offlineChapter ?? apiChapter;
+  const isLoading = !offlineChapter && apiLoading;
   const s = makeStyles(colors);
 
   const handleBookmark = async () => {

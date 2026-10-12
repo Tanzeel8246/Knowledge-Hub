@@ -20,7 +20,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     try {
-      const data = await loginMutation.mutateAsync({ email, password });
+      const data = await loginMutation.mutateAsync({ data: { email, password } });
       if (data.user.role !== "admin") {
         setError("Admin access required");
         return;

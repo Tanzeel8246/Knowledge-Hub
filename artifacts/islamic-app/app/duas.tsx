@@ -77,15 +77,33 @@ export default function DuasScreen() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
+  const [duaList, setDuaList] = useState<Dua[]>(DUAS);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const domain = process.env.EXPO_PUBLIC_DOMAIN;
+        const url = domain ? `https://${domain}/api/duas?limit=100` : `/api/duas?limit=100`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.duas && Array.isArray(data.duas) && data.duas.length > 0) {
+          // Merge avoiding ID collisions
+          const existingIds = new Set(data.duas.map((d: any) => d.id));
+          const combined = [...data.duas, ...DUAS.filter(d => !existingIds.has(d.id))];
+          setDuaList(combined);
+        }
+      } catch {}
+    })();
+  }, []);
 
   const filtered = useMemo(() => {
-    return DUAS.filter(d => {
+    return duaList.filter(d => {
       const matchesCat = activeCategory === "all" || d.category === activeCategory;
       const q = search.toLowerCase();
-      const matchesSearch = !q || d.title.toLowerCase().includes(q) || d.translation.toLowerCase().includes(q) || d.transliteration.toLowerCase().includes(q);
+      const matchesSearch = !q || d.title.toLowerCase().includes(q) || d.translation.toLowerCase().includes(q) || (d.transliteration && d.transliteration.toLowerCase().includes(q)) || d.arabic.includes(q);
       return matchesCat && matchesSearch;
     });
-  }, [activeCategory, search]);
+  }, [duaList, activeCategory, search]);
 
   const copyDua = async (dua: Dua) => {
     const text = `${dua.arabic}\n\n${dua.transliteration}\n\n${dua.translation}\n\nRef: ${dua.reference}`;

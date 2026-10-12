@@ -14,10 +14,10 @@ router.patch("/users/profile", requireAuth, async (req, res) => {
     res.status(400).json({ message: "Invalid request body" });
     return;
   }
-  const [updated] = await db.update(usersTable)
+  await db.update(usersTable)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(usersTable.id, user.id))
-    .returning();
+    .where(eq(usersTable.id, user.id));
+  const [updated] = await db.select().from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
   const { passwordHash: _, ...safeUser } = updated;
   res.json(safeUser);
 });

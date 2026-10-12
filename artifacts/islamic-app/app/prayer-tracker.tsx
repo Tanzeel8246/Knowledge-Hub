@@ -97,6 +97,30 @@ export default function PrayerTrackerScreen() {
   const completedCount = Object.values(completed).filter(Boolean).length;
   const isToday = viewDate === todayKey();
 
+async function syncToServer(date: string, completed: Record<PrayerId, boolean>) {
+  try {
+    const token = await AsyncStorage.getItem("auth_token");
+    if (!token) return;
+    const domain = process.env.EXPO_PUBLIC_DOMAIN;
+    const url = domain ? `https://${domain}/api/trackers/prayer` : `/api/trackers/prayer`;
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        date,
+        fajr: completed.fajr ? "prayed_alone" : "unrecorded",
+        dhuhr: completed.dhuhr ? "prayed_alone" : "unrecorded",
+        asr: completed.asr ? "prayed_alone" : "unrecorded",
+        maghrib: completed.maghrib ? "prayed_alone" : "unrecorded",
+        isha: completed.isha ? "prayed_alone" : "unrecorded",
+      }),
+    });
+  } catch {}
+}
+
   const togglePrayer = useCallback(async (id: PrayerId) => {
     if (!isToday) return;
     if (Platform.OS !== "web") {
@@ -105,12 +129,14 @@ export default function PrayerTrackerScreen() {
     setRecords(prev => {
       const rec = prev.find(r => r.date === viewDate);
       if (!rec) return prev;
+      const newCompleted = { ...rec.completed, [id]: !rec.completed[id] };
       const updated = prev.map(r =>
         r.date === viewDate
-          ? { ...r, completed: { ...r.completed, [id]: !r.completed[id] } }
+          ? { ...r, completed: newCompleted }
           : r
       );
       saveRecords(updated);
+      syncToServer(viewDate, newCompleted);
       return updated;
     });
   }, [isToday, viewDate]);

@@ -12,6 +12,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Gregorian to Hijri conversion (Kuwaiti algorithm)
 function gregorianToHijri(gYear: number, gMonth: number, gDay: number): { year: number; month: number; day: number } {
@@ -104,12 +105,36 @@ const ISLAMIC_EVENTS: IslamicEvent[] = [
 export default function IslamicCalendarScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const [adjustment, setAdjustment] = useState<number>(0);
 
-  const today = new Date();
-  const todayHijri = gregorianToHijri(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  React.useEffect(() => {
+    AsyncStorage.getItem("@app_settings").then(raw => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.hijriAdjustment === "number") setAdjustment(parsed.hijriAdjustment);
+        } catch {}
+      }
+    });
+  }, []);
+
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + adjustment);
+    return d;
+  }, [adjustment]);
+
+  const todayHijri = useMemo(() => {
+    return gregorianToHijri(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  }, [today]);
 
   const [hYear, setHYear] = useState(todayHijri.year);
   const [hMonth, setHMonth] = useState(todayHijri.month);
+
+  React.useEffect(() => {
+    setHYear(todayHijri.year);
+    setHMonth(todayHijri.month);
+  }, [todayHijri.year, todayHijri.month]);
 
   const daysInMonth = getDaysInHijriMonth(hYear, hMonth);
 

@@ -9,6 +9,12 @@ import learningRouter from "./learning";
 import workspaceRouter from "./workspace";
 import progressRouter from "./progress";
 import adminRouter from "./admin";
+import trackersRouter from "./trackers";
+import duasRouter from "./duas";
+import fiqhRouter from "./fiqh";
+import researchRouter from "./research";
+import spiritualRouter from "./spiritual";
+import communityRouter from "./community";
 
 const router: IRouter = Router();
 
@@ -22,5 +28,15 @@ router.use(learningRouter);
 router.use(workspaceRouter);
 router.use(progressRouter);
 router.use(adminRouter);
+router.use(trackersRouter);
+router.use(duasRouter);
+router.use(fiqhRouter);
+router.use(researchRouter);
+router.use(spiritualRouter);
+router.use(communityRouter);
 
 export default router;
+
+
+
+

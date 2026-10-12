@@ -8,6 +8,7 @@ import {
   Switch,
   Platform,
   Alert,
+  Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -62,6 +63,7 @@ interface AppSettings {
   reminderBeforePrayer: number;
   audioAutoPlay: boolean;
   fontSize: number;
+  hijriAdjustment: number; // -2 to +2 days for moon sighting
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -77,6 +79,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   reminderBeforePrayer: 10,
   audioAutoPlay: false,
   fontSize: 24,
+  hijriAdjustment: 0,
 };
 
 export default function SettingsScreen() {
@@ -237,13 +240,21 @@ export default function SettingsScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 40 }]}>
         {/* Prayer Calculation */}
-        <SectionHeader title="PRAYER CALCULATION" />
+        <SectionHeader title="PRAYER & CALENDAR" />
         <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <SelectRow
             icon="compass"
             label="Calculation Method"
             value={currentMethod?.name.split(",")[0] ?? "MWL"}
             onPress={() => setShowMethodPicker(true)}
+          />
+          <SliderRow
+            icon="calendar"
+            label="Hijri Adjustment (رویت ہلال)"
+            value={settings.hijriAdjustment}
+            displayValue={`${settings.hijriAdjustment > 0 ? "+" : ""}${settings.hijriAdjustment} day${Math.abs(settings.hijriAdjustment) === 1 ? "" : "s"}`}
+            onDecrease={() => save({ hijriAdjustment: Math.max(-2, settings.hijriAdjustment - 1) })}
+            onIncrease={() => save({ hijriAdjustment: Math.min(2, settings.hijriAdjustment + 1) })}
           />
           <View style={[s.row, { borderBottomColor: "transparent" }]}>
             <View style={[s.rowIcon, { backgroundColor: colors.primary + "20" }]}>
@@ -373,6 +384,41 @@ export default function SettingsScreen() {
         {/* About */}
         <SectionHeader title="ABOUT" />
         <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          
+          {/* Branding Section */}
+          <TouchableOpacity style={[s.row, { borderBottomColor: colors.border }]} onPress={() => Linking.openURL('https://codehubb.com')}>
+            <View style={[s.rowIcon, { backgroundColor: colors.primary + "20" }]}>
+              <Feather name="code" size={16} color={colors.primary} />
+            </View>
+            <View style={s.rowBody}>
+              <Text style={[s.rowLabel, { color: colors.foreground }]}>CodeHubb</Text>
+              <Text style={[s.rowSublabel, { color: colors.mutedForeground }]}>codehubb.com</Text>
+            </View>
+            <Feather name="external-link" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[s.row, { borderBottomColor: colors.border }]} onPress={() => Linking.openURL('https://mindcraftsai.com')}>
+            <View style={[s.rowIcon, { backgroundColor: colors.gold + "20" }]}>
+              <Feather name="cpu" size={16} color={colors.gold} />
+            </View>
+            <View style={s.rowBody}>
+              <Text style={[s.rowLabel, { color: colors.foreground }]}>MindCrafts_AI</Text>
+              <Text style={[s.rowSublabel, { color: colors.mutedForeground }]}>mindcraftsai.com</Text>
+            </View>
+            <Feather name="external-link" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[s.row, { borderBottomColor: colors.border }]} onPress={() => Linking.openURL('https://wa.me/923023448246')}>
+            <View style={[s.rowIcon, { backgroundColor: "#16A34A" + "20" }]}>
+              <Feather name="message-circle" size={16} color="#16A34A" />
+            </View>
+            <View style={s.rowBody}>
+              <Text style={[s.rowLabel, { color: colors.foreground }]}>Contact Developer</Text>
+              <Text style={[s.rowSublabel, { color: colors.mutedForeground }]}>WhatsApp: +923023448246</Text>
+            </View>
+            <Feather name="external-link" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
           <View style={[s.row, { borderBottomColor: colors.border }]}>
             <View style={[s.rowIcon, { backgroundColor: colors.primary + "20" }]}>
               <Feather name="info" size={16} color={colors.primary} />

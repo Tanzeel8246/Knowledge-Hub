@@ -20,12 +20,13 @@ router.post("/auth/register", async (req, res) => {
     return;
   }
   const passwordHash = await hashPassword(password);
-  const [user] = await db.insert(usersTable).values({
+  await db.insert(usersTable).values({
     name,
     email,
     passwordHash,
     language: language ?? "en",
-  }).returning();
+  });
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   const token = signToken(user.id, user.role);
   const { passwordHash: _, ...safeUser } = user;
   res.status(201).json({ user: safeUser, token });

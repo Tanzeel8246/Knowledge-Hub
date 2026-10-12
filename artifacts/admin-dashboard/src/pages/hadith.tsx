@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export default function HadithPage() {
   const { data: collections, isLoading } = useGetHadithCollections();
   const [selected, setSelected] = useState<string | null>(null);
-  const { data: books, isLoading: booksLoading } = useGetHadithBooks(selected ?? "", { query: { enabled: !!selected } });
+  const { data: books, isLoading: booksLoading } = useGetHadithBooks(selected ?? "", { query: { enabled: !!selected } as any });
 
   return (
     <Layout>

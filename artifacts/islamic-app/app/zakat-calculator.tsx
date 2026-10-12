@@ -40,14 +40,21 @@ const LIABILITY_FIELDS: AssetField[] = [
   { id: "expenses", label: "Immediate Expenses", sublabel: "Bills due within this lunar year", icon: "file-text", color: "#EF4444" },
 ];
 
+const CURRENCY_PRESETS: Record<string, { gold: string; silver: string; symbol: string }> = {
+  USD: { gold: "85", silver: "1.10", symbol: "$" },
+  PKR: { gold: "24500", silver: "310", symbol: "Rs" },
+  SAR: { gold: "318", silver: "4.10", symbol: "SAR" },
+  AED: { gold: "312", silver: "4.05", symbol: "AED" },
+  GBP: { gold: "68", silver: "0.88", symbol: "£" },
+};
+
 export default function ZakatCalculatorScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
-  // Gold price per gram in USD (approximate current market price)
-  const [goldPricePerGram, setGoldPricePerGram] = useState("65");
-  const [silverPricePerGram, setSilverPricePerGram] = useState("0.85");
   const [currency, setCurrency] = useState("USD");
+  const [goldPricePerGram, setGoldPricePerGram] = useState("85");
+  const [silverPricePerGram, setSilverPricePerGram] = useState("1.10");
 
   const [assets, setAssets] = useState<Record<string, string>>({
     cash: "", gold: "", silver: "", investments: "", business: "", rental: "", receivables: "",
@@ -56,7 +63,15 @@ export default function ZakatCalculatorScreen() {
     loans: "", expenses: "",
   });
 
-  const [nisabBasis, setNisabBasis] = useState<"gold" | "silver">("gold");
+  const [nisabBasis, setNisabBasis] = useState<"gold" | "silver">("silver");
+
+  const handleSelectCurrency = (cur: string) => {
+    setCurrency(cur);
+    if (CURRENCY_PRESETS[cur]) {
+      setGoldPricePerGram(CURRENCY_PRESETS[cur].gold);
+      setSilverPricePerGram(CURRENCY_PRESETS[cur].silver);
+    }
+  };
 
   const goldPrice = parseFloat(goldPricePerGram) || 0;
   const silverPrice = parseFloat(silverPricePerGram) || 0;
@@ -123,8 +138,29 @@ export default function ZakatCalculatorScreen() {
           <Text style={[s.infoTrans, { color: colors.gold }]}>Establish prayer and give Zakat — Al-Baqarah 2:43</Text>
         </View>
 
-        {/* Nisab Settings */}
-        <Text style={[s.sectionTitle, { color: colors.mutedForeground }]}>NISAB THRESHOLD</Text>
+        {/* Currency & Nisab Settings */}
+        <Text style={[s.sectionTitle, { color: colors.mutedForeground }]}>SELECT CURRENCY & NISAB</Text>
+        <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+          {Object.keys(CURRENCY_PRESETS).map((cur) => (
+            <TouchableOpacity
+              key={cur}
+              onPress={() => handleSelectCurrency(cur)}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 8,
+                backgroundColor: currency === cur ? colors.primary : colors.card,
+                borderWidth: 1,
+                borderColor: currency === cur ? colors.primary : colors.border,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: "600", color: currency === cur ? "#FFF" : colors.mutedForeground }}>
+                {cur} ({CURRENCY_PRESETS[cur].symbol})
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={s.nisabRow}>
             <TouchableOpacity
@@ -168,6 +204,13 @@ export default function ZakatCalculatorScreen() {
             <Text style={[s.nisabResultLabel, { color: colors.mutedForeground }]}>Nisab Threshold ({nisabBasis})</Text>
             <Text style={[s.nisabResultValue, { color: colors.primary }]}>
               {currency} {nisabThreshold.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Text>
+          </View>
+
+          <View style={{ padding: 12, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.navy + "0A" }}>
+            <Text style={{ fontSize: 11, color: colors.mutedForeground, lineHeight: 16 }}>
+              <Text style={{ fontWeight: "700" }}>فقہی رہنمائی (Fiqh Note): </Text>
+              فقہ حنفی میں احتیاط اور غرباء کے زیادہ نفع کے لیے چاندی کا نصاب ترجیح رکھتا ہے، جبکہ شوافع و حنابلہ میں سونے کا نصاب یا مخصوص جنس کے لحاظ سے استدلال کیا جاتا ہے۔
             </Text>
           </View>
         </View>

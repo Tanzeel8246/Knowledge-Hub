@@ -54,7 +54,8 @@ router.post("/learning/paths/:pathId/enroll", requireAuth, async (req, res) => {
     res.json(existing);
     return;
   }
-  const [enrollment] = await db.insert(enrollmentsTable).values({ userId: user.id, pathId }).returning();
+  await db.insert(enrollmentsTable).values({ userId: user.id, pathId });
+  const [enrollment] = await db.select().from(enrollmentsTable).where(and(eq(enrollmentsTable.userId, user.id), eq(enrollmentsTable.pathId, pathId))).limit(1);
   await db.update(learningPathsTable).set({ enrolledCount: sql`${learningPathsTable.enrolledCount} + 1` }).where(eq(learningPathsTable.id, pathId));
   res.json(enrollment);
 });

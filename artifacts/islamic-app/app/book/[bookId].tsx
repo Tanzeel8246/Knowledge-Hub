@@ -15,17 +15,32 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetBook, useGetBookChapters } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
 export default function BookDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
-  const { data: book, isLoading: bookLoading } = useGetBook(bookId);
-  const { data: chapters, isLoading: chaptersLoading } = useGetBookChapters(bookId);
-  const [downloading, setDownloading] = useState(false);
+  const { data: apiBook, isLoading: bookLoading } = useGetBook(bookId);
+  const { data: apiChapters, isLoading: chaptersLoading } = useGetBookChapters(bookId);
+  const { downloadBook, deleteDownload, getStatus, getBookKey, getBookOffline } = useOfflineDownload();
+  const [offlineData, setOfflineData] = React.useState<{ book: any; chapters: any[] } | null>(null);
 
+  const bookOfflineKey = getBookKey(bookId ?? "");
+  const offlineStatus = getStatus(bookOfflineKey);
+
+  React.useEffect(() => {
+    if (bookId) {
+      getBookOffline<{ book: any; chapters: any[] }>(bookId).then(data => {
+        if (data) setOfflineData(data);
+      });
+    }
+  }, [bookId]);
+
+  const book = offlineData?.book ?? apiBook;
+  const chapters = offlineData?.chapters ?? apiChapters;
   const s = makeStyles(colors);
-  const isLoading = bookLoading || chaptersLoading;
+  const isLoading = (!offlineData && (bookLoading || chaptersLoading));
 
   if (isLoading) {
     return (
@@ -43,46 +58,22 @@ export default function BookDetailScreen() {
     );
   }
 
-  const handleDownload = async () => {
-    if (!book || !chapters) return;
-    try {
-      setDownloading(true);
-      let content = `${book.title}\n`;
-      if (book.titleArabic) content += `${book.titleArabic}\n`;
-      content += `Author: ${book.author}\n\n`;
-      if (book.description) content += `${book.description}\n\n`;
-      content += "=".repeat(60) + "\n\n";
-      for (const ch of chapters) {
-        content += `Chapter ${ch.chapterNumber}: ${ch.title}\n`;
-        if (ch.titleArabic) content += `${ch.titleArabic}\n`;
-        content += "-".repeat(40) + "\n";
-        content += ((ch as any).content ?? "") + "\n\n";
-      }
-
-      if (Platform.OS === "web") {
-        const blob = new Blob([content], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${book.title.replace(/[^a-z0-9]/gi, "_")}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setDownloading(false);
-        return;
-      }
-
-      const blob = new Blob([content], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${book.title.replace(/[^a-z0-9]/gi, "_")}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setDownloading(false);
-      Alert.alert("Downloaded!", `"${book.title}" saved.`, [{ text: "OK" }]);
-    } catch (e) {
-      setDownloading(false);
-      Alert.alert("Error", "Could not download the book. Please try again.");
+  const handleToggleOffline = async () => {
+    if (!book || !bookId) return;
+    if (offlineStatus === "done") {
+      Alert.alert(
+        "Remove Offline Copy",
+        `Remove "${book.title}" from offline storage?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Remove", style: "destructive", onPress: () => { deleteDownload(bookOfflineKey); setOfflineData(null); } },
+        ]
+      );
+    } else {
+      await downloadBook(bookId, book.title, book.titleArabic);
+      const freshlyDownloaded = await getBookOffline<{ book: any; chapters: any[] }>(bookId);
+      if (freshlyDownloaded) setOfflineData(freshlyDownloaded);
+      Alert.alert("Saved Offline", `"${book.title}" is now available offline in your Library.`);
     }
   };
 
@@ -101,16 +92,24 @@ export default function BookDetailScreen() {
                   <Feather name="arrow-left" size={22} color="#FFF" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[s.downloadBtn, { backgroundColor: downloading ? "#FFFFFF20" : colors.gold + "30", borderColor: colors.gold }]}
-                  onPress={handleDownload}
-                  disabled={downloading}
+                  style={[s.downloadBtn, {
+                    backgroundColor: offlineStatus === "done" ? "#16A34A30" : colors.gold + "30",
+                    borderColor: offlineStatus === "done" ? "#16A34A" : colors.gold,
+                  }]}
+                  onPress={handleToggleOffline}
+                  disabled={offlineStatus === "downloading"}
                 >
-                  {downloading ? (
+                  {offlineStatus === "downloading" ? (
                     <ActivityIndicator color={colors.gold} size="small" />
+                  ) : offlineStatus === "done" ? (
+                    <>
+                      <Feather name="check-circle" size={14} color="#16A34A" />
+                      <Text style={[s.downloadBtnText, { color: "#16A34A" }]}>Offline</Text>
+                    </>
                   ) : (
                     <>
                       <Feather name="download" size={14} color={colors.gold} />
-                      <Text style={[s.downloadBtnText, { color: colors.gold }]}>Download</Text>
+                      <Text style={[s.downloadBtnText, { color: colors.gold }]}>Save Offline</Text>
                     </>
                   )}
                 </TouchableOpacity>

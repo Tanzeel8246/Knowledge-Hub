@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/App";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Users, BookOpen, GraduationCap, ScrollText, BookMarked, LogOut, ChevronRight, Menu, X,
+  LayoutDashboard, Users, BookOpen, GraduationCap, ScrollText, BookMarked, HeartHandshake, Calendar, Scale, Sparkles, Heart, MapPin, LogOut, ChevronRight, Menu, X,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,12 @@ const navItems = [
   { href: "/quran", label: "Quran", icon: BookOpen },
   { href: "/hadith", label: "Hadith", icon: ScrollText },
   { href: "/books", label: "Books", icon: BookMarked },
+  { href: "/research", label: "Scholar Research Suite", icon: Sparkles },
+  { href: "/spiritual", label: "Tazkiyah & Awrad", icon: Heart },
+  { href: "/community", label: "Mosques & Kids Corner", icon: MapPin },
+  { href: "/duas", label: "Hisnul Muslim & Duas", icon: HeartHandshake },
+  { href: "/trackers", label: "Worship Trackers", icon: Calendar },
+  { href: "/fiqh", label: "Fiqh & Inheritance", icon: Scale },
   { href: "/learning", label: "Learning Paths", icon: GraduationCap },
 ];
 

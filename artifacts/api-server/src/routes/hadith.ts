@@ -58,7 +58,24 @@ router.get("/hadith/search", async (req, res) => {
   const offset = (page - 1) * limit;
   const searchTerm = `%${q}%`;
 
-  const conditions = [or(ilike(hadithsTable.english, searchTerm), ilike(hadithsTable.arabic, searchTerm))];
+  const conditions = [
+    or(
+      ilike(hadithsTable.english, searchTerm),
+      ilike(hadithsTable.arabic, searchTerm),
+      ilike(hadithsTable.urdu, searchTerm),
+      ilike(hadithsTable.narrator, searchTerm)
+    )
+  ];
+  const numVal = parseInt(q, 10);
+  if (!isNaN(numVal)) {
+    conditions[0] = or(
+      ilike(hadithsTable.english, searchTerm),
+      ilike(hadithsTable.arabic, searchTerm),
+      ilike(hadithsTable.urdu, searchTerm),
+      ilike(hadithsTable.narrator, searchTerm),
+      eq(hadithsTable.hadithNumber, numVal)
+    );
+  }
   if (collectionId) conditions.push(eq(hadithsTable.collectionId, collectionId));
   if (grade && grade !== "all") conditions.push(ilike(hadithsTable.grade!, `%${grade}%`));
 

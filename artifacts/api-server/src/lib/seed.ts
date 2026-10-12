@@ -4,6 +4,7 @@ import {
   hadithCollectionsTable, hadithBooksTable, hadithsTable,
   bookCategoriesTable, booksTable, bookChaptersTable,
   learningPathsTable, lessonsTable,
+  duasTable, fiqhTopicsTable, awradLibraryTable, mosquesTable, kidsStoriesTable,
 } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import { sql, eq } from "drizzle-orm";
@@ -65,7 +66,7 @@ export async function seedQuranAyahsFromAPI(): Promise<void> {
 
   const BATCH = 500;
   for (let i = 0; i < ayahsToInsert.length; i += BATCH) {
-    await db.insert(ayahsTable).values(ayahsToInsert.slice(i, i + BATCH)).onConflictDoNothing();
+    await db.insert(ayahsTable).values(ayahsToInsert.slice(i, i + BATCH)).onDuplicateKeyUpdate({ set: { number: ayahsTable.number } });
     logger.info(`Ayahs seeded: ${Math.min(i + BATCH, ayahsToInsert.length)}/${ayahsToInsert.length}`);
   }
   logger.info(`Quran seeding complete — ${ayahsToInsert.length} ayahs stored.`);
@@ -263,40 +264,43 @@ export async function seedIslamicContent() {
 
   // Book Categories & Books
   const existingCats = await db.select().from(bookCategoriesTable).limit(1);
-  if (existingCats.length === 0) {
-    logger.info("Seeding books...");
-    const [aqeedah, fiqh, tafsir, seerah, ethics, hadithCat] = await db.insert(bookCategoriesTable).values([
+    // Ensure Asma al-Rijal and authentic categories exist
+    await db.insert(bookCategoriesTable).values([
       { name: "Aqeedah (Theology)", nameArabic: "العقيدة", sortOrder: 1 },
       { name: "Fiqh (Islamic Law)", nameArabic: "الفقه", sortOrder: 2 },
       { name: "Tafsir (Quranic Commentary)", nameArabic: "التفسير", sortOrder: 3 },
       { name: "Seerah (Biography of the Prophet)", nameArabic: "السيرة النبوية", sortOrder: 4 },
       { name: "Islamic Ethics & Spirituality", nameArabic: "الأخلاق والتزكية", sortOrder: 5 },
       { name: "Hadith Sciences", nameArabic: "علوم الحديث", sortOrder: 6 },
-    ]).returning();
+      { name: "Asma al-Rijal (Biographical Evaluation)", nameArabic: "أسماء الرجال وعلم الجرح والتعديل", sortOrder: 7 },
+    ]).onConflictDoNothing();
+    const cats = await db.select().from(bookCategoriesTable).orderBy(bookCategoriesTable.sortOrder);
+    const [aqeedah, fiqh, tafsir, seerah, ethics, hadithCat, asmaRijal] = cats;
 
-    const [book1, book2, book3, book4] = await db.insert(booksTable).values([
+    await db.insert(booksTable).values([
       {
-        title: "Kitab al-Tawheed",
-        titleArabic: "كتاب التوحيد",
-        author: "Muhammad ibn Abd al-Wahhab",
-        authorArabic: "محمد بن عبد الوهاب",
+        title: "Al-Aqeedah al-Tahawiyyah",
+        titleArabic: "العقيدة الطحاوية",
+        author: "Imam Abu Ja'far al-Tahawi",
+        authorArabic: "الإمام أبو جعفر الطحاويؒ",
         categoryId: aqeedah.id,
         language: "ar",
-        description: "A foundational text on Islamic monotheism, explaining the oneness of Allah and the worship that is due to Him alone.",
-        totalChapters: 66,
+        description: "The definitive consensus statement of orthodox Sunni creed (Ahl al-Sunnah wal-Jama'ah) according to the formulation of Imam Abu Hanifah, Abu Yusuf, and Muhammad al-Shaybani.",
+        totalChapters: 10,
         isPublic: true,
-        publishedYear: 1740,
+        publishedYear: 933,
       },
       {
-        title: "The Sealed Nectar (Ar-Raheeq Al-Makhtum)",
-        titleArabic: "الرحيق المختوم",
-        author: "Safi-ur-Rahman al-Mubarakpuri",
+        title: "Seerat-ul-Mustafa ﷺ",
+        titleArabic: "سیرت المصطفیٰ ﷺ",
+        author: "Maulana Muhammad Idris Kandhlawi",
+        authorArabic: "مولانا محمد ادریس کاندھلویؒ",
         categoryId: seerah.id,
-        language: "en",
-        description: "Award-winning biography of Prophet Muhammad (PBUH), covering his life from birth to the completion of his mission.",
-        totalChapters: 35,
+        language: "ur",
+        description: "The masterwork and definitive Urdu Seerah of Prophet Muhammad ﷺ authored by the eminent Hadith scholar of Darul Uloom Deoband, rooted purely in authentic narrations and refutation of modern deviations.",
+        totalChapters: 30,
         isPublic: true,
-        publishedYear: 1979,
+        publishedYear: 1960,
       },
       {
         title: "Riyad as-Salihin",
@@ -305,31 +309,33 @@ export async function seedIslamicContent() {
         authorArabic: "الإمام النووي",
         categoryId: hadithCat.id,
         language: "ar",
-        description: "Gardens of the Righteous — a comprehensive collection of hadith covering all aspects of Islamic life.",
+        description: "Gardens of the Righteous — a comprehensive collection of authentic hadiths covering all aspects of Islamic life and character.",
         totalChapters: 372,
         isPublic: true,
         publishedYear: 1275,
       },
       {
-        title: "Al-Aqeedah al-Wasitiyyah",
-        titleArabic: "العقيدة الواسطية",
-        author: "Ibn Taymiyyah",
-        authorArabic: "ابن تيمية",
+        title: "Al-Fiqh al-Akbar",
+        titleArabic: "الفقه الأكبر",
+        author: "Imam Abu Hanifah",
+        authorArabic: "الإمام الأعظم أبو حنيفة النعمانؒ",
         categoryId: aqeedah.id,
         language: "ar",
-        description: "A concise but comprehensive treatise on Islamic creed (aqeedah) written by Ibn Taymiyyah.",
-        totalChapters: 12,
+        description: "The foundational text on Islamic theology and belief directly ascribed to Imam al-A'zam Abu Hanifah Nu'man ibn Thabit.",
+        totalChapters: 10,
         isPublic: true,
-        publishedYear: 1300,
+        publishedYear: 767,
       },
-    ]).returning();
+    ]).onConflictDoNothing();
+    const bks = await db.select().from(booksTable).limit(4);
+    const [book1, book2, book3, book4] = bks;
 
     await db.insert(bookChaptersTable).values([
-      { bookId: book1.id, chapterNumber: 1, title: "The Excellence of Tawheed", titleArabic: "باب فضل التوحيد", content: "Allah the Almighty said: 'It is those who believe and confuse not their belief with wrong — for them is security and they are the rightly guided.' (6:82)\n\nTawheed (monotheism) is the foundation of Islam. It means affirming that Allah alone is worthy of worship, that He alone is the Creator and Sustainer, and affirming all His beautiful names and attributes.\n\nThe Prophet (PBUH) said: 'Whoever dies knowing that there is no god except Allah will enter Paradise.' (Sahih Muslim)" },
-      { bookId: book1.id, chapterNumber: 2, title: "On What Allah Has Rights Over His Slaves", titleArabic: "باب ما لله من الحق على العباد", content: "Mu'adh ibn Jabal (RA) narrated: 'I was riding behind the Prophet (PBUH) on a donkey. He said, \"O Mu'adh, do you know what Allah's right upon His servants is and what the servants' right upon Allah is?\" I replied: \"Allah and His Messenger know better.\" He said, \"Allah's right upon His servants is that they worship Him and associate no partners with Him. The servants' right upon Allah is that He does not punish whoever does not associate partners with Him.\"' (Al-Bukhari and Muslim)" },
-      { bookId: book2.id, chapterNumber: 1, title: "Background and Lineage", content: "Muhammad ibn Abdullah ibn Abd al-Muttalib ibn Hashim... His lineage traces through the noblest Arab tribe to Ishmael (AS), son of Abraham (AS).\n\nThe Prophet (PBUH) was born on Monday, the 12th of Rabi al-Awwal, in the Year of the Elephant (approximately 570 CE) in the city of Makkah. His father, Abdullah, had died before his birth. His mother, Aminah bint Wahb, passed away when he was six years old. He was then raised by his grandfather Abd al-Muttalib, and after his grandfather's death, by his uncle Abu Talib." },
-      { bookId: book3.id, chapterNumber: 1, title: "Sincerity and Intention", titleArabic: "باب الإخلاص وإحضار النية", content: "Allah the Almighty says: 'And they were not commanded except to worship Allah, being sincere to Him in religion.' (98:5)\n\nThe Prophet (PBUH) said: 'Actions are by their intentions, and for everyone is what they intended. Whoever migrated for the sake of Allah and His Messenger, then his migration was for Allah and His Messenger. Whoever migrated to obtain some worldly benefit or to marry a woman, then his migration was for that which he migrated.' (Al-Bukhari and Muslim)" },
-      { bookId: book4.id, chapterNumber: 1, title: "Introduction to Aqeedah", titleArabic: "مقدمة في العقيدة", content: "Praise be to Allah who sent His Messenger with guidance and the religion of truth, to make it victorious over all religions, even if the polytheists detest it.\n\nIslamic aqeedah is built upon six articles of faith:\n1. Belief in Allah (His existence, oneness, names and attributes)\n2. Belief in the Angels\n3. Belief in the Revealed Books\n4. Belief in the Prophets and Messengers\n5. Belief in the Last Day\n6. Belief in Divine Decree (Qadar)" },
+      { bookId: book1.id, chapterNumber: 1, title: "Foundations of Creed", titleArabic: "بيان عقيدة أهل السنة والجماعة", content: "نقول في توحيد الله معتقدين بتوفيق الله: إن الله واحد لا شريك له، ولا شيء مثله، ولا شيء يعجزه، ولا إله غيره. قديم بلا ابتداء، دائم بلا انتهاء، لا يفنى ولا يبيد، ولا يكون إلا ما يريد.\n\nWe say concerning the divine oneness of Allah, believing by Allah's granting of success: Indeed Allah is One, having no partner, nothing is like unto Him, nothing overcomes Him, and there is no deity besides Him." },
+      { bookId: book1.id, chapterNumber: 2, title: "Prophethood of Muhammad ﷺ", titleArabic: "نبوة سيدنا محمد ﷺ", content: "وأن محمدا عبده المصطفى، ونبيه المجتبى، ورسوله المرتضى، وأنه خاتم الأنبياء، وإمام الأتقياء، وسيد المرسلين، وحبيب رب العالمين، وكل دعوى النبوة بعده فغي وهوى.\n\nAnd indeed Muhammad ﷺ is His chosen servant, His selected Prophet, His approved Messenger, and the Seal of the Prophets (Khatam an-Nabiyyin)." },
+      { bookId: book2.id, chapterNumber: 1, title: "نسب مبارک اور ولادت باسعادت", titleArabic: "النسب الشريف والميلاد الميمون", content: "حضور اقدس سید المرسلین، خاتم النبیین، جناب محمد رسول اللہ ﷺ کا نسب عالی تمام روئے زمین کے انسانوں میں سب سے زیادہ اشرف، اکرم اور طاہر ہے۔ آپ ﷺ بنو ہاشم میں مکہ مکرمہ کے مقدس شہر میں عام الفیل میں ربیع الاول کے مبارک مہینے میں دوشنبہ کے روز اس دار فانی میں تشریف لائے۔\n\nمولانا ادریس کاندھلویؒ نے مستند روایات اور احادیث صحیحہ کی روشنی میں واضح فرمایا کہ آپ ﷺ کے نور نبوت سے شام کے محلات روشن ہو گئے۔" },
+      { bookId: book3.id, chapterNumber: 1, title: "Sincerity and Intention", titleArabic: "باب الإخلاص وإحضار النية", content: "Allah the Almighty says: 'And they were not commanded except to worship Allah, being sincere to Him in religion.' (98:5)\n\nThe Prophet (PBUH) said: 'Actions are by their intentions, and for everyone is what they intended. Whoever migrated for the sake of Allah and His Messenger, then his migration was for Allah and His Messenger.' (Al-Bukhari and Muslim)" },
+      { bookId: book4.id, chapterNumber: 1, title: "أصول الإيمان والتوحيد", titleArabic: "باب أصول الإيمان", content: "أصل التوحيد وما يصح الاعتقاد عليه يجب أن يقول: آمنت بالله وملائكته وكتبه ورسله والبعث بعد الموت والقدر خيره وشره من الله تعالى والحساب والميزان والجنة والنار، والكل حق.\n\nThe foundation of Tawheed and authentic belief requires affirming belief in Allah, His Angels, His Books, His Messengers, Resurrection after death, and Divine Decree." },
     ]).onConflictDoNothing();
   }
 
@@ -345,229 +351,236 @@ export async function seedIslamicContent() {
     const ethicsCat = allCats.find(c => c.name.includes("Ethics"));
     const hadithCatRec = allCats.find(c => c.name.includes("Hadith"));
 
+    const asmaRijalCat = allCats.find(c => c.name.includes("Asma") || c.name.includes("الرجال")) ?? hadithCatRec;
+
     if (tafsirCat && aqeedahCat && fiqhCat && seerahCat && ethicsCat && hadithCatRec) {
+      // First, purge any historically seeded non-compliant books
+      const unwantedTitles = [
+        "Tafhimul Quran",
+        "Fi Zilal al-Quran (In the Shade of the Quran)",
+        "Tafsir al-Baydawi (Anwar al-Tanzil)",
+        "Tafsir as-Sa'di (Taysir al-Karim al-Rahman)",
+        "The Sealed Nectar (Ar-Raheeq Al-Makhtum)",
+        "Kitab al-Tawheed",
+        "Al-Aqeedah al-Wasitiyyah",
+      ];
+      for (const unwanted of unwantedTitles) {
+        await db.delete(booksTable).where(eq(booksTable.title, unwanted));
+      }
+
       const newBooks = await db.insert(booksTable).values([
-        // Tafseer Books
+        // Authentic Deobandi & Classical Tafseer Books
         {
-          title: "Tafsir Ibn Kathir (Abridged)",
-          titleArabic: "تفسير ابن كثير",
-          author: "Imam Ibn Kathir",
-          authorArabic: "الإمام ابن كثير",
+          title: "Ma'ariful Quran (Maulana Idris Kandhlawi)",
+          titleArabic: "معارف القرآن لمولانا إدريس کاندھلوي",
+          author: "Maulana Muhammad Idris Kandhlawi",
+          authorArabic: "مولانا محمد ادريس کاندھلویؒ (شیخ الحدیث دار العلوم دیوبند)",
           categoryId: tafsirCat.id,
-          language: "en",
-          description: "One of the most widely read and respected works of Quranic exegesis, authored by the great 14th-century Islamic scholar. Relies heavily on authentic hadiths and the words of the Companions.",
+          language: "ur",
+          description: "جامع اور وقیع تفسیرِ قرآن، جس میں علم کلام، دلائلِ حنفیہ، تصوف اور عقائدِ اہل سنت و جماعت کا شاندار اور مفصل بیان موجود ہے۔",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1968,
+        },
+        {
+          title: "Anwar al-Bayan fi Kashf Asrar al-Quran",
+          titleArabic: "أنوار البيان في كشف أسرار القرآن",
+          author: "Maulana Ashiq Ilahi Bulandshahri",
+          authorArabic: "مولانا محمد عاشق الٰہی بلند شہریؒ",
+          categoryId: tafsirCat.id,
+          language: "ur",
+          description: "علمائے دیوبند کی معروف و مستند اردو تفسیر جو فہمِ قرآن، اصلاحِ احوال، اور فقہی و اخلاقی مسائل کی آسان اور محقق تفہیم پر مشتمل ہے۔",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1985,
+        },
+        {
+          title: "Bayan al-Quran",
+          titleArabic: "بيان القرآن لحكيم الأمة",
+          author: "Hakim al-Ummat Maulana Ashraf Ali Thanwi",
+          authorArabic: "حکیم الامت مولانا اشرف علی تھانویؒ",
+          categoryId: tafsirCat.id,
+          language: "ur",
+          description: "حکیم الامت کی شاہکار تفسیر، جس میں قرآنی ربط، دقائقِ معانی، اور باطنی و ظاہری اصلاحات کا بحرِ زخار موجزن ہے۔",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1908,
+        },
+        {
+          title: "Ahkam al-Quran (Zafar Ahmad Usmani & Idris Kandhlawi)",
+          titleArabic: "أحكام القرآن للتهانوي وأعلام ديوبند",
+          author: "Allama Zafar Ahmad Usmani & Maulana Idris Kandhlawi",
+          authorArabic: "العلامة ظفر أحمد العثماني ومولانا إدريس الكاندھلويؒ",
+          categoryId: tafsirCat.id,
+          language: "ar",
+          description: "قرآن حکیم کی آیاتِ احکام سے فقہ حنفی کے متقن و مدلل استنباط کا عظیم الشان عربی انسائیکلوپیڈیا۔",
+          totalChapters: 30,
+          isPublic: true,
+          publishedYear: 1935,
+        },
+        {
+          title: "Tafsir Ibn Kathir",
+          titleArabic: "تفسير القرآن العظيم (ابن كثير)",
+          author: "Imam Imad al-Din Ibn Kathir",
+          authorArabic: "الحافظ عماد الدين ابن كثيرؒ",
+          categoryId: tafsirCat.id,
+          language: "ar",
+          description: "تفسیر بالماثور کا سب سے مستند اور معتبر مرجع، جس میں احادیثِ نبویہ اور آثارِ صحابہ سے آیات کی مفصل شرح کی گئی ہے۔",
           totalChapters: 30,
           isPublic: true,
           publishedYear: 1370,
         },
         {
-          title: "Tafsir al-Jalalayn",
-          titleArabic: "تفسير الجلالين",
-          author: "Jalal ad-Din al-Suyuti & Jalal ad-Din al-Mahalli",
-          authorArabic: "جلال الدين السيوطي والمحلي",
+          title: "Tafsir al-Qurtubi (Al-Jami' li-Ahkam al-Quran)",
+          titleArabic: "الجامع لأحكام القرآن للقرطبي",
+          author: "Imam Abu Abdillah al-Qurtubi",
+          authorArabic: "الإمام أبو عبد الله القرطبيؒ",
           categoryId: tafsirCat.id,
           language: "ar",
-          description: "A concise and highly authoritative tafsir of the entire Quran, written by two scholars both named Jalal ad-Din. One of the most widely studied works in Islamic education.",
+          description: "احکامِ قرآن، فقہی تقابل اور لغوی استنباط کا جامع اور مستند ترین کلاسیکی مرجع۔",
           totalChapters: 30,
           isPublic: true,
-          publishedYear: 1505,
-        },
-        {
-          title: "Fi Zilal al-Quran (In the Shade of the Quran)",
-          titleArabic: "في ظلال القرآن",
-          author: "Sayyid Qutb",
-          authorArabic: "سيد قطب",
-          categoryId: tafsirCat.id,
-          language: "ar",
-          description: "A comprehensive modern tafsir emphasizing the Quran's guidance for contemporary life and society. Written partially while the author was in prison.",
-          totalChapters: 30,
-          isPublic: true,
-          publishedYear: 1966,
-        },
-        {
-          title: "Ma'ariful Quran",
-          titleArabic: "معارف القرآن",
-          author: "Mufti Muhammad Shafi Usmani",
-          authorArabic: "مفتي محمد شفيع العثماني",
-          categoryId: tafsirCat.id,
-          language: "ur",
-          description: "A comprehensive Urdu tafsir (commentary) of the Quran, widely read in South Asia. It covers fiqh rulings, linguistic analysis, and spiritual guidance.",
-          totalChapters: 30,
-          isPublic: true,
-          publishedYear: 1969,
-        },
-        {
-          title: "Tafhimul Quran",
-          titleArabic: "تفهيم القرآن",
-          author: "Sayyid Abul Ala Maududi",
-          authorArabic: "سيد أبو الأعلى المودودي",
-          categoryId: tafsirCat.id,
-          language: "ur",
-          description: "A detailed Urdu commentary on the Quran focusing on its message, literary aspects, and application to modern life. A landmark work of 20th-century Islamic literature.",
-          totalChapters: 30,
-          isPublic: true,
-          publishedYear: 1972,
+          publishedYear: 1273,
         },
         {
           title: "Tafsir al-Tabari (Jami al-Bayan)",
-          titleArabic: "جامع البيان في تأويل القرآن",
+          titleArabic: "جامع البيان عن تأويل آي القرآن للطبري",
           author: "Imam Ibn Jarir al-Tabari",
-          authorArabic: "الإمام ابن جرير الطبري",
+          authorArabic: "الإمام ابن جرير الطبريؒ",
           categoryId: tafsirCat.id,
           language: "ar",
-          description: "The oldest and most exhaustive classical tafsir, compiling reports from the Companions and Successors. Considered the foundational work of Quranic exegesis.",
+          description: "ام التفاسیر — صحابہ و تابعین کے مرویات و اسانید کا سب سے قدیم اور عظیم ذخیرہ۔",
           totalChapters: 30,
           isPublic: true,
           publishedYear: 923,
         },
-        // Hadith Books
+
+        // Authentic Classical & Deobandi Seerah Books
         {
-          title: "Muwatta Imam Malik",
-          titleArabic: "الموطأ",
-          author: "Imam Malik ibn Anas",
-          authorArabic: "الإمام مالك بن أنس",
-          categoryId: hadithCatRec.id,
-          language: "ar",
-          description: "The earliest surviving written collection of hadith, compiled by the founder of the Maliki school of jurisprudence. Considered highly authentic.",
-          totalChapters: 61,
+          title: "Nashr-ut-Teeb fi Dhikr al-Nabi al-Habeeb ﷺ",
+          titleArabic: "نشر الطيب في ذكر النبي الحبيب ﷺ",
+          author: "Hakim al-Ummat Maulana Ashraf Ali Thanwi",
+          authorArabic: "حکیم الامت مولانا اشرف علی تھانویؒ",
+          categoryId: seerahCat.id,
+          language: "ur",
+          description: "حضور اقدس ﷺ کے میلادِ پاک، شمائل، خصائص، اور معجزات پر علمائے دیوبند کا معتمد اور پرنور تذکرہ۔",
+          totalChapters: 35,
           isPublic: true,
-          publishedYear: 795,
+          publishedYear: 1912,
         },
         {
-          title: "Bulugh al-Maram (Attainment of the Objective)",
+          title: "Al-Khasa'is al-Kubra",
+          titleArabic: "الخصائص الكبرى للسيوطي",
+          author: "Imam Jalal al-Din al-Suyuti",
+          authorArabic: "الإمام جلال الدين السيوطيؒ",
+          categoryId: seerahCat.id,
+          language: "ar",
+          description: "سرورِ کائنات ﷺ کے معجزات، اختصاصات اور خصائصِ مبارکہ پر مستند احادیث کا عظیم الشان عربی ذخیرہ۔",
+          totalChapters: 40,
+          isPublic: true,
+          publishedYear: 1505,
+        },
+        {
+          title: "Seerah Ibn Hisham",
+          titleArabic: "السيرة النبوية لابن هشام",
+          author: "Abu Muhammad Abd al-Malik Ibn Hisham",
+          authorArabic: "عبد الملك بن هشامؒ",
+          categoryId: seerahCat.id,
+          language: "ar",
+          description: "تاریخِ اسلام میں سیرتِ طیبہ کا سب سے قدیم، اصلی اور معتمد ترین کلاسیکی مرجع۔",
+          totalChapters: 45,
+          isPublic: true,
+          publishedYear: 833,
+        },
+
+        // Asma al-Rijal (علم الجرح والتعدیل وأصول الحدیث)
+        {
+          title: "Nasb al-Rayah li-Ahadith al-Hidayah",
+          titleArabic: "نصب الراية لأحاديث الهداية للزيلعي",
+          author: "Hafiz Jamal al-Din al-Zayla'i",
+          authorArabic: "الحافظ جمال الدين الزيلعي الحنفيؒ",
+          categoryId: asmaRijalCat.id,
+          language: "ar",
+          description: "تخریجِ احادیث، تحقیقِ اسناد اور ائمہ رجال کی آراء کا شاہکار انسائیکلوپیڈیا، جس پر جملہ محدثین و محققین کا اعتماد ہے۔",
+          totalChapters: 25,
+          isPublic: true,
+          publishedYear: 1360,
+        },
+        {
+          title: "Tahdhib al-Tahdhib",
+          titleArabic: "تهذيب التهذيب لابن حجر العسقلاني",
+          author: "Hafiz Ibn Hajar al-Asqalani",
+          authorArabic: "الحافظ ابن حجر العسقلانيؒ",
+          categoryId: asmaRijalCat.id,
+          language: "ar",
+          description: "کتبِ ستہ کے رواۃ، محدثین، جرح و تعدیل اور ثقاہت و عدالت کا سب سے مفصل اور جامع ترین مرجع۔",
+          totalChapters: 12,
+          isPublic: true,
+          publishedYear: 1448,
+        },
+        {
+          title: "Athar al-Sunan (Allama Shawq Nimwi)",
+          titleArabic: "آثار السنن للعلامة النيموي الحنفي",
+          author: "Allama Zahir Ahsan Shawq Nimwi",
+          authorArabic: "العلامة ظهير أحسن شوق نيمويؒ",
+          categoryId: asmaRijalCat.id,
+          language: "ar",
+          description: "فقہ حنفی کے احادیث و آثار کی اسنادی تحقیق، جرح و تعدیل اور درایتی صحت کا معتمد ترین متن و حاشیہ۔",
+          totalChapters: 15,
+          isPublic: true,
+          publishedYear: 1898,
+        },
+
+        // Hadith & Fiqh
+        {
+          title: "Bulugh al-Maram min Adillat al-Ahkam",
           titleArabic: "بلوغ المرام من أدلة الأحكام",
-          author: "Ibn Hajar al-Asqalani",
-          authorArabic: "ابن حجر العسقلاني",
+          author: "Hafiz Ibn Hajar al-Asqalani",
+          authorArabic: "الحافظ ابن حجر العسقلانيؒ",
           categoryId: hadithCatRec.id,
-          language: "en",
-          description: "A collection of 1,358 hadiths related to Islamic jurisprudence, widely used in fiqh study. Each hadith includes a grading and source reference.",
+          language: "ar",
+          description: "فقہی احکام اور عبادات و معاملات سے متعلق احادیث کا متقن اور مستند مجموعہ مع تخریج و حکم۔",
           totalChapters: 16,
           isPublic: true,
           publishedYear: 1430,
         },
         {
-          title: "Al-Arba'een al-Nawawiyyah (40 Hadith Nawawi)",
-          titleArabic: "الأربعون النووية",
-          author: "Imam an-Nawawi",
-          authorArabic: "الإمام النووي",
-          categoryId: hadithCatRec.id,
-          language: "en",
-          description: "A foundational collection of 42 hadiths covering the core principles and pillars of Islam. Perhaps the most memorized collection of hadith worldwide.",
-          totalChapters: 5,
-          isPublic: true,
-          publishedYear: 1283,
-        },
-        {
-          title: "Al-Adab al-Mufrad",
-          titleArabic: "الأدب المفرد",
-          author: "Imam al-Bukhari",
-          authorArabic: "الإمام البخاري",
-          categoryId: hadithCatRec.id,
-          language: "en",
-          description: "A collection of 1,322 hadiths focusing on Islamic manners, character, and social conduct — compiled by the author of Sahih al-Bukhari.",
-          totalChapters: 42,
-          isPublic: true,
-          publishedYear: 870,
-        },
-        {
           title: "Mishkat al-Masabih",
-          titleArabic: "مشكاة المصابيح",
+          titleArabic: "مشكاة المصابيح للتبريزي",
           author: "Al-Khatib at-Tabrizi",
-          authorArabic: "الخطيب التبريزي",
+          authorArabic: "الخطيب التبريزيؒ",
           categoryId: hadithCatRec.id,
-          language: "en",
-          description: "An expanded collection of over 5,000 hadiths drawn from major canonical collections, arranged by topic and widely used in Islamic seminaries.",
+          language: "ar",
+          description: "مدارسِ اسلامیہ اور درسِ نظامی کا منتخب و مقبول ترین جامع احادیث کا نصاب۔",
           totalChapters: 30,
           isPublic: true,
           publishedYear: 1340,
         },
         {
-          title: "Sunan al-Darimi",
-          titleArabic: "سنن الدارمي",
-          author: "Imam al-Darimi",
-          authorArabic: "الإمام الدارمي",
+          title: "Al-Arba'een al-Nawawiyyah (40 Hadith)",
+          titleArabic: "الأربعون النووية",
+          author: "Imam Yahya ibn Sharaf an-Nawawi",
+          authorArabic: "الإمام النوويؒ",
           categoryId: hadithCatRec.id,
           language: "ar",
-          description: "One of the major hadith collections containing approximately 3,500 hadiths, covering Islamic law, Quran sciences, and prophetic traditions.",
-          totalChapters: 24,
+          description: "دینِ اسلام کے کلی قواعد و اصول پر مشتمل چھیالیس بنیادی اور جامع احادیثِ نبویہ۔",
+          totalChapters: 5,
           isPublic: true,
-          publishedYear: 869,
-        },
-        // Fiqh Books
-        {
-          title: "Fiqh al-Sunnah",
-          titleArabic: "فقه السنة",
-          author: "Sayyid Sabiq",
-          authorArabic: "سيد سابق",
-          categoryId: fiqhCat.id,
-          language: "en",
-          description: "A comprehensive guide to Islamic jurisprudence based directly on the Quran and Sunnah, covering worship, transactions, family law, and more.",
-          totalChapters: 14,
-          isPublic: true,
-          publishedYear: 1945,
+          publishedYear: 1283,
         },
         {
-          title: "Reliance of the Traveller (Umdat as-Salik)",
-          titleArabic: "عمدة السالك وعدة الناسك",
-          author: "Ahmad ibn Naqib al-Misri",
-          authorArabic: "أحمد بن النقيب المصري",
-          categoryId: fiqhCat.id,
-          language: "en",
-          description: "A classic Shafi'i manual of Islamic jurisprudence, covering ritual worship, commercial dealings, marriage, and ethics.",
-          totalChapters: 25,
-          isPublic: true,
-          publishedYear: 1368,
-        },
-        // Ethics & Spirituality
-        {
-          title: "Ihya Ulum al-Din (Revival of the Religious Sciences)",
-          titleArabic: "إحياء علوم الدين",
-          author: "Imam al-Ghazali",
-          authorArabic: "الإمام الغزالي",
+          title: "Ihya Ulum al-Din",
+          titleArabic: "إحياء علوم الدين للغزالي",
+          author: "Hujjat al-Islam Imam al-Ghazali",
+          authorArabic: "حجة الإسلام الإمام أبو حامد الغزاليؒ",
           categoryId: ethicsCat.id,
           language: "ar",
-          description: "Considered one of the greatest works of Islamic literature, covering the external acts of worship and the internal purification of the soul.",
+          description: "تزکیہ نفس، باطنی اصلاح اور معرفتِ الٰہی پر دنیائے اسلام کا بے مثل شاہکار۔",
           totalChapters: 40,
           isPublic: true,
           publishedYear: 1107,
         },
-        {
-          title: "The Beginning of Guidance (Bidayat al-Hidayah)",
-          titleArabic: "بداية الهداية",
-          author: "Imam al-Ghazali",
-          authorArabic: "الإمام الغزالي",
-          categoryId: ethicsCat.id,
-          language: "en",
-          description: "A concise guide to the path of spiritual development, written by Imam al-Ghazali as a practical introduction to Islamic ethics and spirituality.",
-          totalChapters: 10,
-          isPublic: true,
-          publishedYear: 1095,
-        },
-        // Seerah
-        {
-          title: "Muhammad: His Life Based on the Earliest Sources",
-          titleArabic: "سيرة النبي الكريم",
-          author: "Martin Lings (Abu Bakr Siraj ad-Din)",
-          categoryId: seerahCat.id,
-          language: "en",
-          description: "A beautifully written biography of the Prophet Muhammad (PBUH) based on authentic 8th and 9th century Arabic sources.",
-          totalChapters: 87,
-          isPublic: true,
-          publishedYear: 1983,
-        },
-        {
-          title: "Seerah Ibn Hisham",
-          titleArabic: "السيرة النبوية لابن هشام",
-          author: "Ibn Hisham",
-          authorArabic: "ابن هشام",
-          categoryId: seerahCat.id,
-          language: "ar",
-          description: "The earliest and most authoritative biography of Prophet Muhammad (PBUH), based on the original work of Ibn Ishaq. The primary reference for all later biographies.",
-          totalChapters: 45,
-          isPublic: true,
-          publishedYear: 833,
-        },
-      ]).returning();
+      ]);
 
       // Add sample chapters for key new books
       if (newBooks.length > 0) {
@@ -613,22 +626,55 @@ export async function seedIslamicContent() {
     }
   }
 
-  // Also seed more hadith collections if missing
+  // Also seed more hadith collections if missing (including Hanafi dalail collections)
   const allCollections = await db.select().from(hadithCollectionsTable);
-  if (allCollections.length < 8) {
-    logger.info("Seeding extended hadith collections...");
+  if (allCollections.length < 22) {
+    logger.info("Seeding extended 22+ hadith collections (Hanafi Daleel, Classical Sunan & Masanid)...");
     await db.insert(hadithCollectionsTable).values([
-      { id: "muwatta", name: "Muwatta Imam Malik", nameArabic: "الموطأ", author: "Imam Malik ibn Anas", totalHadiths: 1720, description: "The earliest surviving major collection of hadith, compiled by the founder of the Maliki school. Considered highly authentic by scholars." },
+      // Existing Muwatta'ayn and Tahawi
+      { id: "muwatta", name: "Muwatta Imam Malik (Yahya)", nameArabic: "موطأ الإمام مالك (رواية يحيى الليثي)", author: "Imam Malik ibn Anas", totalHadiths: 1720, description: "The earliest surviving major collection of hadith, compiled by the founder of the Maliki school. Considered highly authentic by scholars." },
+      { id: "muwatta-muhammad", name: "Muwatta Imam Muhammad (Hanafi)", nameArabic: "موطأ الإمام محمد بن الحسن الشيباني", author: "Imam Muhammad al-Shaybani", totalHadiths: 1005, description: "Muwatta narrated by the leading student of Imam Abu Hanifah, containing authoritative legal commentary, Hanafi jurisprudence, and comparison with Ahl al-Madinah." },
+      { id: "tahawi", name: "Sharh Ma'ani al-Athar", nameArabic: "شرح معاني الآثار للإمام الطحاوي", author: "Imam Abu Ja'far al-Tahawi", totalHadiths: 7300, description: "The monumental encyclopedic hadith compendium establishing the evidential foundation (Dala'il) of the Hanafi school of jurisprudence through rigorous isnad and dirayah analysis." },
       { id: "darimi", name: "Sunan al-Darimi", nameArabic: "سنن الدارمي", author: "Imam al-Darimi", totalHadiths: 3500, description: "A major hadith collection arranged by legal topics, compiled by Abd Allah ibn Abd al-Rahman al-Darimi." },
-    ]).onConflictDoNothing();
+
+      // Additional 12 Classical & Hanafi-Foundational Hadith Collections
+      { id: "musnad-ahmad", name: "Musnad Ahmad ibn Hanbal", nameArabic: "مسند الإمام أحمد بن حنبل", author: "Imam Ahmad ibn Hanbal", totalHadiths: 27647, description: "The largest and most comprehensive classical Musnad, collecting over 27,000 narrations arranged by Companion chains." },
+      { id: "musannaf-ibn-abi-shaybah", name: "Al-Musannaf li-Ibn Abi Shaybah", nameArabic: "المصنف لابن أبي شيبة", author: "Imam Ibn Abi Shaybah", totalHadiths: 37943, description: "The preeminent classical encyclopedic compendium of Marfu hadiths, Mawquf reports of Companions, and Maqtu verdicts of Tabi'in, central to Hanafi jurisprudence." },
+      { id: "musannaf-abdur-razzaq", name: "Al-Musannaf li-Abd al-Razzaq", nameArabic: "المصنف لعبد الرزاق الصنعاني", author: "Imam Abd al-Razzaq al-San'ani", totalHadiths: 21033, description: "One of the earliest comprehensive Hadith compilations, containing essential fiqh narrations from Ibn Jurayj, Ma'mar, and early authorities." },
+      { id: "mustadrak-hakim", name: "Al-Mustadrak 'ala al-Sahihayn", nameArabic: "المستدرك على الصحيحين للحاكم", author: "Al-Hakim al-Nishapuri", totalHadiths: 9045, description: "A major hadith collection documenting narrations meeting the criteria of Bukhari and Muslim that were not included in their primary works." },
+      { id: "sunan-bayhaqi", name: "Al-Sunan al-Kubra lil-Bayhaqi", nameArabic: "السنن الكبرى للبيهقي", author: "Imam Abu Bakr al-Bayhaqi", totalHadiths: 21812, description: "The definitive compendium of legal hadith evidences arranged according to chapters of jurisprudence." },
+      { id: "kitab-al-athar-abu-yusuf", name: "Kitab al-Athar li-Abi Yusuf", nameArabic: "كتاب الآثار للإمام أبي يوسف", author: "Imam Qadi Abu Yusuf", totalHadiths: 1090, description: "The direct hadith transmissions of Imam Abu Hanifah recorded by his greatest student, Chief Justice Abu Yusuf." },
+      { id: "kitab-al-athar-shaybani", name: "Kitab al-Athar lil-Shaybani", nameArabic: "كتاب الآثار لمحمد بن الحسن الشيباني", author: "Imam Muhammad al-Shaybani", totalHadiths: 970, description: "The primary source of Hanafi hadith traditions directly related by Imam Muhammad from Imam al-A'zam Abu Hanifah." },
+      { id: "mushkil-al-athar", name: "Sharh Mushkil al-Athar", nameArabic: "شرح مشكل الآثار للطحاوي", author: "Imam Abu Ja'far al-Tahawi", totalHadiths: 6000, description: "Tahawi's deep analytical reconciliation of apparent discrepancies and difficult texts in hadith literature." },
+      { id: "tabarani-kabir", name: "Al-Mu'jam al-Kabir lil-Tabarani", nameArabic: "المعجم الكبير للطبراني", author: "Imam Al-Tabarani", totalHadiths: 25000, description: "The monumental biographical hadith compendium of Tabarani arranged alphabetically by the Sahabah." },
+      { id: "musnad-abi-yala", name: "Musnad Abi Ya'la al-Mawsili", nameArabic: "مسند أبي يعلى الموصلي", author: "Imam Abu Ya'la al-Mawsili", totalHadiths: 7555, description: "A highly esteemed classical Musnad renowned for high chains of narration and fiqh traditions." },
+      { id: "musnad-al-bazzar", name: "Musnad al-Bazzar (Al-Bahr al-Zakhkhar)", nameArabic: "مسند البزار (البحر الزخار)", author: "Imam Abu Bakr al-Bazzar", totalHadiths: 10000, description: "Distinguished Musnad famous for detailed 'Ilal (critical hadith defects) evaluations alongside narrations." },
+      { id: "sunan-saeed-ibn-mansur", name: "Sunan Sa'id ibn Mansur", nameArabic: "سنن سعيد بن منصور", author: "Imam Sa'id ibn Mansur al-Khurdsani", totalHadiths: 3000, description: "A pivotal early 3rd-century hadith and tafsir collection preserving foundational legal traditions." },
+    ]).onDuplicateKeyUpdate({ set: { id: sql`id` } });
 
     await db.insert(hadithBooksTable).values([
       { collectionId: "muwatta", bookNumber: 1, nameArabic: "كتاب الطهارة", nameEnglish: "Book of Purification", totalHadiths: 131 },
       { collectionId: "muwatta", bookNumber: 2, nameArabic: "كتاب الصلاة", nameEnglish: "Book of Prayer", totalHadiths: 90 },
       { collectionId: "muwatta", bookNumber: 3, nameArabic: "كتاب الزكاة", nameEnglish: "Book of Zakat", totalHadiths: 41 },
+      { collectionId: "muwatta-muhammad", bookNumber: 1, nameArabic: "كتاب مواقيت الصلاة", nameEnglish: "Timings of Prayer", totalHadiths: 45 },
+      { collectionId: "muwatta-muhammad", bookNumber: 2, nameArabic: "كتاب الوضوء والغسل", nameEnglish: "Purification & Wudu", totalHadiths: 60 },
+      { collectionId: "tahawi", bookNumber: 1, nameArabic: "كتاب الطهارة وتطهير المياه", nameEnglish: "Purification & Waters", totalHadiths: 250 },
+      { collectionId: "tahawi", bookNumber: 2, nameArabic: "كتاب الصلاة وأحكام الركوع والسجود", nameEnglish: "Prayer, Ruku & Sujud Rulings", totalHadiths: 420 },
       { collectionId: "darimi", bookNumber: 1, nameArabic: "كتاب المقدمة", nameEnglish: "Introduction", totalHadiths: 65 },
       { collectionId: "darimi", bookNumber: 2, nameArabic: "كتاب الطهارة", nameEnglish: "Book of Purification", totalHadiths: 101 },
-    ]).onConflictDoNothing();
+      { collectionId: "musnad-ahmad", bookNumber: 1, nameArabic: "مسند العشرة المبشرين بالجنة", nameEnglish: "Musnad of the Ten Promised Paradise", totalHadiths: 300 },
+      { collectionId: "musannaf-ibn-abi-shaybah", bookNumber: 1, nameArabic: "كتاب الطهارة وأحكام المياه", nameEnglish: "Purification and Water Rulings", totalHadiths: 450 },
+      { collectionId: "musannaf-abdur-razzaq", bookNumber: 1, nameArabic: "كتاب الصلاة والإمامة", nameEnglish: "Prayer & Imamah", totalHadiths: 380 },
+      { collectionId: "mustadrak-hakim", bookNumber: 1, nameArabic: "كتاب الإيمان ومعرفة التوحيد", nameEnglish: "Faith & Monotheism", totalHadiths: 210 },
+      { collectionId: "sunan-bayhaqi", bookNumber: 1, nameArabic: "كتاب الطهارة وسنن الوضوء", nameEnglish: "Purification & Ablution Sunan", totalHadiths: 320 },
+      { collectionId: "kitab-al-athar-abu-yusuf", bookNumber: 1, nameArabic: "أبواب الطهارة والصلاة", nameEnglish: "Chapters of Taharah & Salah", totalHadiths: 150 },
+      { collectionId: "kitab-al-athar-shaybani", bookNumber: 1, nameArabic: "أبواب الصلاة وآثار الصحابة", nameEnglish: "Chapters of Salah & Companions", totalHadiths: 140 },
+      { collectionId: "mushkil-al-athar", bookNumber: 1, nameArabic: "باب ما روي في أحكام النية", nameEnglish: "Narrations on Intentions", totalHadiths: 90 },
+      { collectionId: "tabarani-kabir", bookNumber: 1, nameArabic: "مسند عبد الله بن مسعود رضي الله عنه", nameEnglish: "Musnad Abdullah ibn Mas'ud", totalHadiths: 250 },
+      { collectionId: "musnad-abi-yala", bookNumber: 1, nameArabic: "مسند علي بن أبي طالب رضي الله عنه", nameEnglish: "Musnad Ali ibn Abi Talib", totalHadiths: 180 },
+      { collectionId: "musnad-al-bazzar", bookNumber: 1, nameArabic: "مسند أبي بكر الصديق رضي الله عنه", nameEnglish: "Musnad Abu Bakr al-Siddiq", totalHadiths: 120 },
+      { collectionId: "sunan-saeed-ibn-mansur", bookNumber: 1, nameArabic: "كتاب التفسير وفضائل القرآن", nameEnglish: "Tafsir & Virtues of Quran", totalHadiths: 160 },
+    ]).onDuplicateKeyUpdate({ set: { bookNumber: sql`book_number` } });
 
     await db.insert(hadithsTable).values([
       {
@@ -648,6 +694,24 @@ export async function seedIslamicContent() {
         reference: "Muwatta Malik 2:1",
       },
       {
+        collectionId: "muwatta-muhammad", bookNumber: 1, hadithNumber: 1,
+        arabic: "أَخْبَرَنَا مَالِكٌ، حَدَّثَنَا ابْنُ شِهَابٍ، عَنْ عَطَاءِ بْنِ يَزِيدَ، عَنْ أَبِي أَيُّوبَ الأَنْصَارِيِّ أَنَّ رَسُولَ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ قَالَ: إِذَا أَتَيْتُمُ الْغَائِطَ فَلَا تَسْتَقْبِلُوا الْقِبْلَةَ وَلَا تَسْتَدْبِرُوهَا",
+        english: "When you go to relieve yourselves, do not face the Qiblah nor turn your backs to it.",
+        urdu: "جب تم رفع حاجت کے لیے جاؤ تو قبلہ کی طرف رخ نہ کرو اور نہ اس کی طرف پشت کرو۔ (موطأ امام محمد - قولِ امام ابو حنیفہ)",
+        narrator: "Abu Ayyub al-Ansari (RA) / Imam Muhammad / Imam Abu Hanifah",
+        grade: "Sahih",
+        reference: "Muwatta Imam Muhammad 1:1",
+      },
+      {
+        collectionId: "tahawi", bookNumber: 2, hadithNumber: 1,
+        arabic: "حَدَّثَنَا مُحَمَّدُ بْنُ خُزَيْمَةَ، ثنا مُسْلِمُ بْنُ إِبْرَاهِيمَ، ثنا شُعْبَةُ، عَنْ أَبِي إِسْحَاقَ، عَنِ الأَسْوَدِ، عَنْ عَبْدِ اللَّهِ بْنِ مَسْعُودٍ رَضِيَ اللَّهُ عَنْهُ قَالَ: صَلَّيْتُ مَعَ رَسُولِ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ وَأَبِي بَكْرٍ وَعُمَرَ فَلَمْ يَرْفَعُوا أَيْدِيَهُمْ إِلَّا فِي افْتِتَاحِ الصَّلَاةِ",
+        english: "Abdullah ibn Mas'ud (RA) said: I prayed with the Messenger of Allah (PBUH), Abu Bakr, and Umar, and they did not raise their hands except at the opening takbir of prayer.",
+        urdu: "حضرت عبد اللہ بن مسعود رضی اللہ عنہ نے فرمایا: میں نے رسول اللہ ﷺ، ابوبکر اور عمر رضی اللہ عنہما کے ساتھ نماز پڑھی، تو انہوں نے صرف نماز کے آغاز میں ہاتھ اٹھائے اور بعد میں ہاتھ نہیں اٹھائے۔ (شرح معانی الآثار للطحاوی - اصل دلیل احناف)",
+        narrator: "Abdullah ibn Mas'ud (RA) -> Al-Aswad -> Abu Ishaq -> Shu'bah",
+        grade: "Sahih (Dala'il al-Hanafiyyah)",
+        reference: "Sharh Ma'ani al-Athar 2:1 (Tahawi 1328)",
+      },
+      {
         collectionId: "darimi", bookNumber: 1, hadithNumber: 1,
         arabic: "الْعِلْمُ إِمَامُ الْعَمَلِ وَالْعَمَلُ تَابِعُهُ",
         english: "Knowledge is the leader of action, and action follows it.",
@@ -655,20 +719,21 @@ export async function seedIslamicContent() {
         grade: "Mawquf",
         reference: "Sunan al-Darimi 1:1",
       },
-    ]).onConflictDoNothing();
+    ]).onDuplicateKeyUpdate({ set: { id: sql`id` } });
   }
 
   // Learning Paths
   const existingPaths = await db.select().from(learningPathsTable).limit(1);
   if (existingPaths.length === 0) {
     logger.info("Seeding learning paths...");
-    const paths = await db.insert(learningPathsTable).values([
+    await db.insert(learningPathsTable).values([
       { title: "Foundations of Islamic Faith", description: "A comprehensive introduction to the core beliefs of Islam — the six pillars of Iman, the five pillars of Islam, and the fundamentals of Aqeedah.", level: "beginner", topic: "Aqeedah", totalLessons: 8, estimatedHours: "12" },
       { title: "Quran Recitation & Tajweed", description: "Master the rules of Tajweed for proper Quran recitation. Learn makharij al-huroof, sifat, and apply them in practice.", level: "beginner", topic: "Quran", totalLessons: 10, estimatedHours: "15" },
       { title: "Fiqh of Prayer (Salah)", description: "A detailed study of the Islamic prayer — its conditions, pillars, obligations, and recommended acts.", level: "intermediate", topic: "Fiqh", totalLessons: 12, estimatedHours: "18" },
       { title: "Introduction to Hadith Sciences", description: "Learn the terminology and methodology of hadith criticism. Understand isnad, matn, and hadith classification.", level: "intermediate", topic: "Hadith", totalLessons: 10, estimatedHours: "20" },
       { title: "Seerah: Life of the Prophet", description: "A chronological study of the life of Prophet Muhammad (PBUH), from birth through the completion of the Islamic mission.", level: "beginner", topic: "Seerah", totalLessons: 15, estimatedHours: "25" },
-    ]).returning();
+    ]);
+    const paths = await db.select().from(learningPathsTable).limit(5);
 
     await db.insert(lessonsTable).values([
       {
@@ -863,6 +928,128 @@ export async function seedIslamicContent() {
       theme: "dark",
     });
     logger.info("Default admin created: admin@islamicresearch.app / admin123456");
+  }
+
+  // Duas (Hisnul Muslim)
+  const existingDuas = await db.select({ count: sql<number>`cast(count(*) as integer)` }).from(duasTable);
+  if (existingDuas[0]?.count === 0) {
+    logger.info("Seeding initial Duas (Hisnul Muslim)...");
+    await db.insert(duasTable).values([
+      {
+        category: "morning",
+        title: "Morning Remembrance (صبح کے اذکار)",
+        titleArabic: "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ",
+        arabic: "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ",
+        transliteration: "Asbahna wa-asbahal-mulku lillah, walhamdu lillah, la ilaha illallahu wahdahu la shareeka lah, lahul-mulku wa lahul-hamdu wa huwa 'ala kulli shay'in qadeer.",
+        translation: "We have entered the morning and the kingdom belongs to Allah, and all praise is due to Allah. None has the right to be worshipped except Allah alone, without partner.",
+        translationUr: "ہم نے صبح کی اور تمام بادشاہی اللہ کی ہو گئی، اور تمام تعریفیں اللہ ہی کے لیے ہیں۔ اللہ کے سوا کوئی معبود نہیں، وہ اکیلا ہے، اس کا کوئی شریک نہیں، اسی کی بادشاہی ہے اور اسی کے لیے تعریف ہے، اور وہ ہر چیز پر قادر ہے۔",
+        reference: "Sahih Muslim 2723",
+        benefits: "صبح و شام حفاظت اور توحید کے اقرار کے لیے مسنون دعا۔",
+        sortOrder: 1,
+      },
+      {
+        category: "evening",
+        title: "Evening Remembrance (شام کے اذکار)",
+        titleArabic: "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ",
+        arabic: "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ",
+        transliteration: "Amsayna wa-amsal-mulku lillah, walhamdu lillah, la ilaha illallahu wahdahu la shareeka lah.",
+        translation: "We have reached the evening and the kingdom belongs to Allah. All praise is for Allah.",
+        translationUr: "ہم نے شام کی اور تمام بادشاہی اللہ کے لیے ہو گئی، اور تمام تعریفیں اللہ ہی کے لیے ہیں۔",
+        reference: "Sahih Muslim 2723",
+        benefits: "شام کے وقت حفاظتِ الٰہی کی پناہ لینا۔",
+        sortOrder: 2,
+      },
+      {
+        category: "prayer",
+        title: "Dua After Prayer (نماز کے بعد کی دعا)",
+        titleArabic: "اللَّهُمَّ أَنْتَ السَّلاَمُ وَمِنْكَ السَّلاَمُ",
+        arabic: "اللَّهُمَّ أَنْتَ السَّلاَمُ وَمِنْكَ السَّلاَمُ، تَبَارَكْتَ يَا ذَا الْجَلاَلِ وَالإِكْرَامِ",
+        transliteration: "Allahumma antas-salamu wa minkas-salam, tabarakta ya dhal-jalali wal-ikram.",
+        translation: "O Allah, You are Peace and from You comes peace. Blessed are You, O Owner of majesty and honor.",
+        translationUr: "اے اللہ! تو سلامتی والا ہے اور تجھی سے سلامتی حاصل ہوتی ہے، تو بڑی برکت والا ہے اے عظمت اور بزرگی والے!",
+        reference: "Sahih Muslim 592",
+        benefits: "ہر فرض نماز کے سلام پھیرنے کے بعد پڑھنا مسنون ہے۔",
+        sortOrder: 3,
+      },
+    ]).onConflictDoNothing();
+  }
+
+  // Fiqh Topics
+  const existingFiqh = await db.select({ count: sql<number>`cast(count(*) as integer)` }).from(fiqhTopicsTable);
+  if (existingFiqh[0]?.count === 0) {
+    logger.info("Seeding comparative Fiqh topics...");
+    await db.insert(fiqhTopicsTable).values([
+      {
+        category: "salah",
+        title: "رفع الیدین نماز میں (Raf al-Yadayn in Salah)",
+        titleArabic: "حكم رفع اليدين عند الركوع والرفع منه",
+        summary: "تکبیر تحریمہ کے علاوہ رکوع میں جاتے اور رکوع سے اٹھتے وقت ہاتھ اٹھانے کا فقہی حکم۔",
+        hanafiView: "صرف تکبیرِ تحریمہ کے وقت ہاتھ اٹھانا مسنون ہے۔ رکوع جاتے اور اٹھتے وقت رفع الیدین منسوخ یا غیر اولیٰ ہے۔ (دلائل: حدیث ابن مسعودؓ، مصنف ابن ابی شیبہ)",
+        shafiiView: "تکبیر تحریمہ، رکوع جاتے وقت، اور رکوع سے سر اٹھاتے وقت رفع الیدین سنتِ مؤکدہ ہے۔ (دلائل: حدیث ابن عمرؓ، صحیح بخاری و مسلم)",
+        malikiView: "جمہور مالکیہ کے نزدیک صرف تکبیر تحریمہ میں ہاتھ اٹھانا اولیٰ ہے، مدینہ کے عمل کی بنا پر۔",
+        hanbaliView: "تکبیر تحریمہ، رکوع، اور رکوع سے اٹھتے وقت رفع الیدین مستحب ہے۔",
+        dalil: "حدیث ابن عمر رضی اللہ عنہ (بخاری 735) و حدیث عبد اللہ بن مسعود رضی اللہ عنہ (ترمذی 257)",
+        isPublished: true,
+        sortOrder: 1,
+      },
+      {
+        category: "zakat",
+        title: "سونے چاندی اور نقدی کا نصاب (Nisab of Gold & Silver)",
+        titleArabic: "نصاب الذهب والفضة والأوراق النقدية",
+        summary: "زکوٰۃ فرض ہونے کے لیے نصاب کی مقدار اور چاندی بمقابلہ سونے کی قیمت کا معیار۔",
+        hanafiView: "سونے کا نصاب ساڑھے سات تولے (87.48 گرام) اور چاندی کا ساڑھے باون تولے (612.36 گرام) ہے۔ موجودہ نقدی میں غریبوں کی مصلحت کے تحت چاندی کے نصاب کا اعتبار کیا جاتا ہے۔",
+        shafiiView: "سونے اور چاندی کے نصاب علیحدہ ہیں، دونوں کو باہم نہیں ملایا جاتا الا یہ کہ دونوں اپنی اپنی حد کو پہنچیں۔",
+        malikiView: "اگر نقد رقم سونے کے نصاب تک پہنچے تب بھی زکوٰۃ لازم ہے، مروجہ کرنسی کی بنیاد پر چاندی یا سونے میں سے جو فقراء کے حق میں بہتر ہو۔",
+        hanbaliView: "نقد روپیہ چاندی اور سونے کے قائم مقام ہے اور دونوں میں سے جو کم قیمت ہو اس کا نصاب مانا جاتا ہے۔",
+        dalil: "سنن ابی داؤد (1573) اور صحیح بخاری (1454)",
+        isPublished: true,
+        sortOrder: 2,
+      },
+    ]).onConflictDoNothing();
+  }
+
+  // Mosques
+  const existingMosques = await db.select({ count: sql<number>`cast(count(*) as integer)` }).from(mosquesTable);
+  if (existingMosques[0]?.count === 0) {
+    logger.info("Seeding central Mosques...");
+    await db.insert(mosquesTable).values([
+      {
+        name: "Faisal Mosque (فیصل مسجد)",
+        arabicName: "مسجد الملك فيصل",
+        city: "Islamabad",
+        country: "Pakistan",
+        address: "Shah Faisal Ave, E-8, Islamabad",
+        latitude: "33.7297",
+        longitude: "73.0372",
+        capacity: 300000,
+        fajrJamaat: "05:15",
+        dhuhrJamaat: "13:30",
+        asrJamaat: "17:00",
+        maghribJamaat: "18:45",
+        ishaJamaat: "20:30",
+        jummahJamaat: "13:45",
+        imamName: "Dr. Zia ur Rehman",
+        verified: true,
+      },
+      {
+        name: "Badshahi Mosque (بادشاہی مسجد)",
+        arabicName: "مسجد بادشاهي",
+        city: "Lahore",
+        country: "Pakistan",
+        address: "Walled City, Lahore, Punjab",
+        latitude: "31.5881",
+        longitude: "74.3094",
+        capacity: 100000,
+        fajrJamaat: "05:20",
+        dhuhrJamaat: "13:30",
+        asrJamaat: "17:15",
+        maghribJamaat: "18:50",
+        ishaJamaat: "20:30",
+        jummahJamaat: "14:00",
+        imamName: "Maulana Abdul Khabir Azad",
+        verified: true,
+      },
+    ]).onConflictDoNothing();
   }
 
   logger.info("Seed check complete.");

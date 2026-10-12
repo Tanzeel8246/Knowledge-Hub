@@ -20,6 +20,7 @@ import * as Location from "expo-location";
 import { useColors } from "@/hooks/useColors";
 import { usePrayerNotifications, PRAYER_KEYS, PrayerKey } from "@/hooks/usePrayerNotifications";
 import { Coordinates, CalculationMethod, PrayerTimes, Madhab, SunnahTimes } from "adhan";
+import { Audio } from "expo-av";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,14 @@ const METHODS = [
   { id: "Tehran",               label: "Institute of Geophysics, Tehran"            },
 ];
 
+export const MUEZZINS = [
+  { id: "makkah", name: "Makkah Mukarramah", arabic: "المسجد الحرام بمكة", muezzin: "Sheikh Ali Mulla", audioUrl: "https://cdn.aladhan.com/audio/adhans/makkah.mp3" },
+  { id: "madinah", name: "Madinah Munawwarah", arabic: "المسجد النبوي الشريف", muezzin: "Sheikh Essam Bukhari", audioUrl: "https://cdn.aladhan.com/audio/adhans/madina.mp3" },
+  { id: "alaqsa", name: "Masjid al-Aqsa", arabic: "المسجد الأقصى المبارك", muezzin: "Qari Naji Qazzaz", audioUrl: "https://cdn.aladhan.com/audio/adhans/quds.mp3" },
+  { id: "cairo", name: "Al-Azhar Cairo", arabic: "جامع الأزهر بالقاهرة", muezzin: "Sheikh Mustafa Ismail", audioUrl: "https://cdn.aladhan.com/audio/adhans/cairo.mp3" },
+  { id: "istanbul", name: "Istanbul Turkey", arabic: "جامع السلطان أحمد", muezzin: "Ustad Hafiz Osman", audioUrl: "https://cdn.aladhan.com/audio/adhans/istanbul.mp3" },
+];
+
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -95,10 +104,10 @@ function getIslamicDate(): string {
   } catch { return ""; }
 }
 
-function buildPrayerList(lat: number, lng: number, methodId: string, date?: Date): PrayerEntry[] {
+function buildPrayerList(lat: number, lng: number, methodId: string, date?: Date, madhabParam?: string): PrayerEntry[] {
   const coords = new Coordinates(lat, lng);
-  const params = (CalculationMethod as any)[methodId]?.() ?? CalculationMethod.MuslimWorldLeague();
-  params.madhab = Madhab.Shafi;
+  const params = (CalculationMethod as any)[methodId]?.() ?? CalculationMethod.Karachi();
+  params.madhab = (madhabParam === "shafi") ? Madhab.Shafi : Madhab.Hanafi;
   const d = date ?? new Date();
   const pt = new PrayerTimes(coords, d, params);
   return [
@@ -159,6 +168,52 @@ export default function PrayerTimesScreen() {
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [playingMuezzin, setPlayingMuezzin] = useState<string | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
+  const handlePlayPreview = async (m: typeof MUEZZINS[0]) => {
+    try {
+      if (playingMuezzin === m.id) {
+        if (soundRef.current) {
+          await soundRef.current.stopAsync();
+          await soundRef.current.unloadAsync();
+          soundRef.current = null;
+        }
+        setPlayingMuezzin(null);
+        return;
+      }
+
+      if (soundRef.current) {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+
+      setPlayingMuezzin(m.id);
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: m.audioUrl },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      soundRef.current = sound;
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingMuezzin(null);
+          soundRef.current = null;
+        }
+      });
+    } catch {
+      setPlayingMuezzin(null);
+      Alert.alert("Azan Audio", "Could not play audio right now. Please check your internet connection.");
+    }
+  };
 
   // Weekly
   const [weeklyData, setWeeklyData] = useState<{ date: Date; prayers: Record<string, Date> }[]>([]);
@@ -635,6 +690,85 @@ export default function PrayerTimesScreen() {
                     <Feather name="bell-off" size={15} color={colors.mutedForeground} />
                     <Text style={[s.notifActionText, { color: colors.mutedForeground }]}>Disable All</Text>
                   </TouchableOpacity>
+                </View>
+
+                {/* Muezzin & Azan Audio Selection */}
+                <View style={{ marginTop: 24, marginBottom: 8 }}>
+                  <Text style={[s.sectionTitle, { color: colors.foreground }]}>صوتِ اذان و مؤذن (Azan Voice & Muezzin)</Text>
+                  <Text style={[s.sectionNote, { color: colors.mutedForeground, marginBottom: 12 }]}>
+                    نماز کے وقت کے لیے حرمینی مؤذن کا انتخاب کریں اور آواز سنیں۔
+                  </Text>
+                  {MUEZZINS.map(m => {
+                    const isSelected = (notif.prefs.muezzin || "makkah") === m.id;
+                    const isPlaying = playingMuezzin === m.id;
+
+                    return (
+                      <View
+                        key={m.id}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          backgroundColor: isSelected ? colors.primary + "15" : colors.card,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                          borderWidth: 1,
+                          borderRadius: 12,
+                          padding: 12,
+                          marginBottom: 8,
+                          gap: 12,
+                        }}
+                      >
+                        <TouchableOpacity
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 19,
+                            backgroundColor: isPlaying ? colors.gold : (isSelected ? colors.primary : colors.border),
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                          onPress={() => handlePlayPreview(m)}
+                        >
+                          <Feather name={isPlaying ? "square" : "play"} size={16} color="#FFF" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{ flex: 1 }}
+                          onPress={() => notif.setMuezzin(m.id)}
+                        >
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={{ fontSize: 14, fontWeight: "600", color: isSelected ? colors.primary : colors.foreground }}>
+                              {m.name}
+                            </Text>
+                            {isSelected && (
+                              <View style={{ backgroundColor: colors.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                                <Text style={{ fontSize: 10, color: "#FFF", fontWeight: "700" }}>منتخب</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                            {m.muezzin} · {m.arabic}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => notif.setMuezzin(m.id)}
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            borderWidth: 2,
+                            borderColor: isSelected ? colors.primary : colors.mutedForeground,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          {isSelected && (
+                            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </View>
 
                 {/* Info */}

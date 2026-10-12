@@ -28,7 +28,7 @@ interface DhikrPreset {
   color: string;
 }
 
-const PRESETS: DhikrPreset[] = [
+const DEFAULT_PRESETS: DhikrPreset[] = [
   { id: "subhanallah", arabic: "سُبْحَانَ اللَّهِ", transliteration: "SubhanAllah", translation: "Glory be to Allah", target: 33, color: "#0D9373" },
   { id: "alhamdulillah", arabic: "الْحَمْدُ لِلَّهِ", transliteration: "Alhamdulillah", translation: "All praise is for Allah", target: 33, color: "#D4A017" },
   { id: "allahuakbar", arabic: "اللَّهُ أَكْبَرُ", transliteration: "Allahu Akbar", translation: "Allah is the Greatest", target: 34, color: "#1D4ED8" },
@@ -40,6 +40,8 @@ const PRESETS: DhikrPreset[] = [
 ];
 
 const STORAGE_KEY = "tasbih_history";
+const CUSTOM_DHIKR_KEY = "custom_dhikr";
+const SESSIONS_KEY = "tasbih_sessions";
 
 interface HistoryEntry {
   dhikrId: string;
@@ -52,11 +54,21 @@ interface HistoryEntry {
 export default function TasbihScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const [selected, setSelected] = useState<DhikrPreset>(PRESETS[0]);
+  
+  const [customPresets, setCustomPresets] = useState<DhikrPreset[]>([]);
+  const allPresets = [...customPresets, ...DEFAULT_PRESETS];
+  
+  const [selected, setSelected] = useState<DhikrPreset>(DEFAULT_PRESETS[0]);
   const [count, setCount] = useState(0);
+  const [sessionMap, setSessionMap] = useState<Record<string, number>>({});
   const [totalSession, setTotalSession] = useState(0);
+  
   const [showPresets, setShowPresets] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showAddCustom, setShowAddCustom] = useState(false);
+  
+  const [newDhikr, setNewDhikr] = useState({ arabic: "", transliteration: "", translation: "", target: "33" });
+  
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [vibrateEnabled, setVibrateEnabled] = useState(true);
 
@@ -67,7 +79,27 @@ export default function TasbihScreen() {
     AsyncStorage.getItem(STORAGE_KEY).then(data => {
       if (data) setHistory(JSON.parse(data));
     });
+    AsyncStorage.getItem(CUSTOM_DHIKR_KEY).then(data => {
+      if (data) {
+        const parsed = JSON.parse(data);
+        setCustomPresets(parsed);
+      }
+    });
+    AsyncStorage.getItem(SESSIONS_KEY).then(data => {
+      if (data) {
+        const parsed = JSON.parse(data);
+        setSessionMap(parsed);
+        if (parsed[DEFAULT_PRESETS[0].id]) {
+          setCount(parsed[DEFAULT_PRESETS[0].id]);
+        }
+      }
+    });
   }, []);
+
+  const saveSessions = (newMap: Record<string, number>) => {
+    setSessionMap(newMap);
+    AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(newMap));
+  };
 
   const animatePress = useCallback(() => {
     Animated.sequence([
@@ -80,6 +112,7 @@ export default function TasbihScreen() {
     const newCount = count + 1;
     setCount(newCount);
     setTotalSession(t => t + 1);
+    saveSessions({ ...sessionMap, [selected.id]: newCount });
     animatePress();
 
     if (vibrateEnabled && Platform.OS !== "web") {
@@ -103,14 +136,15 @@ export default function TasbihScreen() {
         target: selected.target,
         date: new Date().toISOString(),
       };
-      const updated = [entry, ...history].slice(0, 50);
+      const updated = [entry, ...history].slice(0, 100); // keep last 100
       setHistory(updated);
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
-  }, [count, selected, animatePress, vibrateEnabled, history, progressAnim]);
+  }, [count, selected, animatePress, vibrateEnabled, history, progressAnim, sessionMap]);
 
   const handleReset = () => {
-    if (count > 0) {
+    if (count > 0 && count < selected.target) {
+      // optionally save partial session to history
       const entry: HistoryEntry = {
         dhikrId: selected.id,
         transliteration: selected.transliteration,
@@ -118,31 +152,58 @@ export default function TasbihScreen() {
         target: selected.target,
         date: new Date().toISOString(),
       };
-      const updated = [entry, ...history].slice(0, 50);
+      const updated = [entry, ...history].slice(0, 100);
       setHistory(updated);
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
     setCount(0);
+    saveSessions({ ...sessionMap, [selected.id]: 0 });
     progressAnim.setValue(0);
   };
 
   const selectPreset = (preset: DhikrPreset) => {
-    if (count > 0) {
-      const entry: HistoryEntry = {
-        dhikrId: selected.id,
-        transliteration: selected.transliteration,
-        count,
-        target: selected.target,
-        date: new Date().toISOString(),
-      };
-      const updated = [entry, ...history].slice(0, 50);
-      setHistory(updated);
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    }
+    saveSessions({ ...sessionMap, [selected.id]: count });
+    
+    const nextCount = sessionMap[preset.id] || 0;
     setSelected(preset);
-    setCount(0);
-    progressAnim.setValue(0);
+    setCount(nextCount);
+    progressAnim.setValue(Math.min(nextCount / preset.target, 1));
     setShowPresets(false);
+  };
+
+  const saveCustomDhikr = () => {
+    if (!newDhikr.transliteration.trim()) {
+      Alert.alert("Error", "Please enter at least the transliteration/name of the Dhikr.");
+      return;
+    }
+    const custom: DhikrPreset = {
+      id: "custom_" + Date.now(),
+      arabic: newDhikr.arabic || newDhikr.transliteration,
+      transliteration: newDhikr.transliteration,
+      translation: newDhikr.translation || "Custom Dhikr",
+      target: parseInt(newDhikr.target) || 33,
+      color: "#0891B2" // nice teal color for custom
+    };
+    const updated = [custom, ...customPresets];
+    setCustomPresets(updated);
+    AsyncStorage.setItem(CUSTOM_DHIKR_KEY, JSON.stringify(updated));
+    setShowAddCustom(false);
+    setNewDhikr({ arabic: "", transliteration: "", translation: "", target: "33" });
+    selectPreset(custom);
+  };
+
+  const deleteCustomDhikr = (id: string) => {
+    Alert.alert("Delete Dhikr", "Are you sure you want to delete this custom dhikr?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => {
+        const updated = customPresets.filter(p => p.id !== id);
+        setCustomPresets(updated);
+        AsyncStorage.setItem(CUSTOM_DHIKR_KEY, JSON.stringify(updated));
+        if (selected.id === id) {
+          selectPreset(DEFAULT_PRESETS[0]);
+        }
+      }}
+    ]);
   };
 
   const s = makeStyles(colors);
@@ -260,32 +321,98 @@ export default function TasbihScreen() {
         <View style={[s.modal, { backgroundColor: colors.background }]}>
           <View style={[s.modalHeader, { borderBottomColor: colors.border }]}>
             <Text style={[s.modalTitle, { color: colors.foreground }]}>Choose Dhikr</Text>
-            <TouchableOpacity onPress={() => setShowPresets(false)}>
-              <Feather name="x" size={22} color={colors.foreground} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <TouchableOpacity onPress={() => setShowAddCustom(true)}>
+                <Feather name="plus" size={24} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowPresets(false)}>
+                <Feather name="x" size={24} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
-            {PRESETS.map(p => (
-              <TouchableOpacity
-                key={p.id}
-                style={[s.presetItem, {
-                  backgroundColor: selected.id === p.id ? p.color + "15" : colors.card,
-                  borderColor: selected.id === p.id ? p.color : colors.border,
-                }]}
-                onPress={() => selectPreset(p)}
-              >
-                <View style={[s.presetDot, { backgroundColor: p.color }]} />
-                <View style={s.presetInfo}>
-                  <Text style={[s.presetArabic, { color: colors.foreground }]}>{p.arabic}</Text>
-                  <Text style={[s.presetTranslit, { color: p.color }]}>{p.transliteration}</Text>
-                  <Text style={[s.presetTranslation, { color: colors.mutedForeground }]}>{p.translation}</Text>
-                </View>
-                <View style={[s.presetTarget, { backgroundColor: p.color + "20" }]}>
-                  <Text style={[s.presetTargetText, { color: p.color }]}>×{p.target}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {allPresets.map(p => {
+              const isCustom = p.id.startsWith("custom_");
+              const savedCount = sessionMap[p.id] || 0;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[s.presetItem, {
+                    backgroundColor: selected.id === p.id ? p.color + "15" : colors.card,
+                    borderColor: selected.id === p.id ? p.color : colors.border,
+                  }]}
+                  onPress={() => selectPreset(p)}
+                >
+                  <View style={[s.presetDot, { backgroundColor: p.color }]} />
+                  <View style={s.presetInfo}>
+                    <Text style={[s.presetArabic, { color: colors.foreground }]}>{p.arabic}</Text>
+                    <Text style={[s.presetTranslit, { color: p.color }]}>{p.transliteration}</Text>
+                    <Text style={[s.presetTranslation, { color: colors.mutedForeground }]}>{p.translation}</Text>
+                    {savedCount > 0 && selected.id !== p.id && (
+                      <Text style={[s.presetSaved, { color: colors.mutedForeground }]}>Session paused at: {savedCount}</Text>
+                    )}
+                  </View>
+                  <View style={s.presetRight}>
+                    <View style={[s.presetTarget, { backgroundColor: p.color + "20" }]}>
+                      <Text style={[s.presetTargetText, { color: p.color }]}>×{p.target}</Text>
+                    </View>
+                    {isCustom && (
+                      <TouchableOpacity onPress={() => deleteCustomDhikr(p.id)} style={{ padding: 8 }}>
+                        <Feather name="trash-2" size={16} color={colors.destructive} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Add Custom Dhikr Modal */}
+      <Modal visible={showAddCustom} animationType="fade" transparent={true} onRequestClose={() => setShowAddCustom(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.customModal, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.customModalTitle, { color: colors.foreground }]}>Add Custom Dhikr</Text>
+            <TextInput
+              style={[s.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Arabic (Optional)"
+              placeholderTextColor={colors.mutedForeground}
+              value={newDhikr.arabic}
+              onChangeText={t => setNewDhikr({ ...newDhikr, arabic: t })}
+              textAlign="right"
+            />
+            <TextInput
+              style={[s.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Name / Transliteration *"
+              placeholderTextColor={colors.mutedForeground}
+              value={newDhikr.transliteration}
+              onChangeText={t => setNewDhikr({ ...newDhikr, transliteration: t })}
+            />
+            <TextInput
+              style={[s.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Meaning (Optional)"
+              placeholderTextColor={colors.mutedForeground}
+              value={newDhikr.translation}
+              onChangeText={t => setNewDhikr({ ...newDhikr, translation: t })}
+            />
+            <TextInput
+              style={[s.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Target Count (e.g. 33)"
+              placeholderTextColor={colors.mutedForeground}
+              keyboardType="numeric"
+              value={newDhikr.target}
+              onChangeText={t => setNewDhikr({ ...newDhikr, target: t })}
+            />
+            <View style={s.customModalActions}>
+              <TouchableOpacity style={s.customBtn} onPress={() => setShowAddCustom(false)}>
+                <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.customBtn, { backgroundColor: colors.primary }]} onPress={saveCustomDhikr}>
+                <Text style={{ color: "#FFF", fontFamily: "Inter_600SemiBold" }}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -317,7 +444,7 @@ export default function TasbihScreen() {
               keyExtractor={(_, i) => String(i)}
               contentContainerStyle={{ padding: 16 }}
               renderItem={({ item }) => {
-                const preset = PRESETS.find(p => p.id === item.dhikrId);
+                const preset = allPresets.find(p => p.id === item.dhikrId);
                 const color = preset?.color ?? colors.primary;
                 return (
                   <View style={[s.historyItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -391,8 +518,18 @@ function makeStyles(colors: any) {
     presetArabic: { fontSize: 18, marginBottom: 2 },
     presetTranslit: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 1 },
     presetTranslation: { fontSize: 11, fontFamily: "Inter_400Regular" },
+    presetSaved: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 4 },
+    presetRight: { alignItems: "flex-end", gap: 8 },
     presetTarget: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
     presetTargetText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+    
+    modalOverlay: { flex: 1, backgroundColor: "#00000080", alignItems: "center", justifyContent: "center", padding: 20 },
+    customModal: { width: "100%", borderRadius: 20, padding: 20, borderWidth: 1 },
+    customModalTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 16 },
+    input: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, marginBottom: 12, fontFamily: "Inter_400Regular" },
+    customModalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 8 },
+    customBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+    
     historyEmpty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
     historyEmptyText: { fontSize: 17, fontFamily: "Inter_600SemiBold" },
     historyEmptySub: { fontSize: 13, fontFamily: "Inter_400Regular" },

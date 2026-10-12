@@ -69,6 +69,23 @@ router.get("/books/:bookId/chapters/:chapterId", async (req, res) => {
   res.json(chapter);
 });
 
+router.get("/books/:bookId/download", async (req, res) => {
+  const parsed = GetBookParams.safeParse({ bookId: req.params.bookId });
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid book ID" });
+    return;
+  }
+  const [book] = await db.select().from(booksTable).where(eq(booksTable.id, parsed.data.bookId)).limit(1);
+  if (!book) {
+    res.status(404).json({ message: "Book not found" });
+    return;
+  }
+  const chapters = await db.select().from(bookChaptersTable)
+    .where(eq(bookChaptersTable.bookId, book.id))
+    .orderBy(bookChaptersTable.chapterNumber);
+  res.json({ book, chapters });
+});
+
 router.get("/books/:bookId", async (req, res) => {
   const parsed = GetBookParams.safeParse({ bookId: req.params.bookId });
   if (!parsed.success) {

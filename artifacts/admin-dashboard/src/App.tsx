@@ -11,6 +11,12 @@ import BooksPage from "@/pages/books";
 import LearningPage from "@/pages/learning";
 import HadithPage from "@/pages/hadith";
 import QuranPage from "@/pages/quran";
+import DuasPage from "@/pages/duas";
+import TrackersAdminPage from "@/pages/trackers";
+import FiqhAdminPage from "@/pages/fiqh";
+import ResearchAdminPage from "@/pages/research";
+import SpiritualAdminPage from "@/pages/spiritual";
+import CommunityAdminPage from "@/pages/community";
 import NotFound from "@/pages/not-found";
 
 setBaseUrl(window.location.origin);
@@ -42,7 +48,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 function ProtectedRouter() {
   const { token } = useAuth();
   const [location, navigate] = useLocation();
-  const { data: me, isLoading, isError } = useGetMe({ query: { enabled: !!token, retry: false } });
+  const { data: me, isLoading, isError } = useGetMe({ query: { enabled: !!token, retry: false } as any });
 
   useEffect(() => {
     if (!token || isError) navigate("/login");
@@ -66,6 +72,12 @@ function ProtectedRouter() {
       <Route path="/learning" component={LearningPage} />
       <Route path="/hadith" component={HadithPage} />
       <Route path="/quran" component={QuranPage} />
+      <Route path="/duas" component={DuasPage} />
+      <Route path="/trackers" component={TrackersAdminPage} />
+      <Route path="/fiqh" component={FiqhAdminPage} />
+      <Route path="/research" component={ResearchAdminPage} />
+      <Route path="/spiritual" component={SpiritualAdminPage} />
+      <Route path="/community" component={CommunityAdminPage} />
       <Route path="/login" component={LoginPage} />
       <Route component={NotFound} />
     </Switch>

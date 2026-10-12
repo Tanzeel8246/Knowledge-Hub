@@ -7,7 +7,7 @@ export const INDEX_KEY = "offline_index_v2";
 export const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 
-export type DownloadItemType = "quran_surah" | "hadith_collection";
+export type DownloadItemType = "quran_surah" | "hadith_collection" | "islamic_book";
 export type DownloadStatus = "idle" | "downloading" | "syncing" | "done" | "error";
 
 export interface DownloadRecord {
@@ -124,6 +124,39 @@ export function useOfflineDownload() {
     }
   }, [index]);
 
+  const downloadBook = useCallback(async (
+    bookId: string,
+    label: string,
+    labelAr?: string,
+  ) => {
+    const key = `islamic_book_${bookId}`;
+    setItemStatus(key, "downloading");
+    setItemProgress(key, 0);
+    try {
+      await ensureDir();
+      setItemProgress(key, 0.1);
+      const res = await fetch(`${BASE_URL}/api/books/${bookId}/download`);
+      if (!res.ok) throw new Error("fetch failed");
+      setItemProgress(key, 0.5);
+      const data = await res.json();
+      const json = JSON.stringify(data);
+      setItemProgress(key, 0.8);
+      const path = `${OFFLINE_DIR}${key}.json`;
+      await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
+      const info = await FileSystem.getInfoAsync(path) as any;
+      setItemProgress(key, 1);
+      setItemStatus(key, "done");
+      const now = Date.now();
+      const newIdx = {
+        ...index,
+        [key]: { key, type: "islamic_book" as const, label, labelAr, sizeBytes: info.size ?? json.length, downloadedAt: index[key]?.downloadedAt ?? now, lastSynced: now },
+      };
+      await saveIndex(newIdx);
+    } catch {
+      setItemStatus(key, "error");
+    }
+  }, [index]);
+
   const syncItem = useCallback(async (key: string) => {
     const rec = index[key];
     if (!rec) return;
@@ -138,6 +171,9 @@ export function useOfflineDownload() {
       } else if (rec.type === "hadith_collection") {
         const id = key.replace("hadith_collection_", "");
         url = `${BASE_URL}/api/hadith/collections/${id}/download`;
+      } else if (rec.type === "islamic_book") {
+        const id = key.replace("islamic_book_", "");
+        url = `${BASE_URL}/api/books/${id}/download`;
       }
       setItemProgress(key, 0.2);
       const res = await fetch(url);
@@ -204,8 +240,10 @@ export function useOfflineDownload() {
   function getProgress(key: string) { return progress[key] ?? 0; }
   function getSurahKey(n: number) { return `quran_surah_${n}`; }
   function getCollectionKey(id: string) { return `hadith_collection_${id}`; }
+  function getBookKey(id: string) { return `islamic_book_${id}`; }
   function getSurahOffline<T>(n: number) { return readOfflineFile<T>(getSurahKey(n)); }
   function getHadithCollectionOffline<T>(id: string) { return readOfflineFile<T>(getCollectionKey(id)); }
+  function getBookOffline<T>(id: string) { return readOfflineFile<T>(getBookKey(id)); }
 
   const staleCount = Object.keys(index).filter(k => isStale(k)).length;
   const totalBytes = Object.values(index).reduce((s, r) => s + (r.sizeBytes ?? 0), 0);
@@ -218,17 +256,20 @@ export function useOfflineDownload() {
     staleCount,
     downloadSurah,
     downloadHadithCollection,
+    downloadBook,
     syncItem,
     syncAllStale,
     deleteDownload,
     getSurahOffline,
     getHadithCollectionOffline,
+    getBookOffline,
     isDownloaded,
     isStale,
     getStatus,
     getProgress,
     getSurahKey,
     getCollectionKey,
+    getBookKey,
     reload: loadIndex,
   };
 }

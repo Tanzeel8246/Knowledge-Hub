@@ -321,6 +321,10 @@ export default function SurahReaderScreen() {
         keyExtractor={item => String(item.numberInSurah)}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: showPlayer ? insets.bottom + 130 : insets.bottom + 40 }}
+        initialNumToRender={15}
+        maxToRenderPerBatch={20}
+        windowSize={11}
+        removeClippedSubviews={Platform.OS !== "web"}
         onScrollToIndexFailed={() => {}}
         ListHeaderComponent={
           <View style={[s.bismillah, { backgroundColor: colors.navy }]}>
@@ -616,9 +620,27 @@ function makeStyles(colors: any, arabicFontSize: number, translationFontSize: nu
     ayahMetaText: { fontSize: 10, fontFamily: "Inter_400Regular" },
     ayahActions: { flexDirection: "row", alignItems: "center", gap: 14 },
 
-    arabic: { textAlign: "right", marginBottom: 12, fontFamily: "Inter_400Regular" },
+    arabic: {
+      textAlign: "right",
+      marginBottom: 12,
+      fontFamily: Platform.select({
+        ios: "Geeza Pro",
+        android: "serif",
+        web: "'Traditional Arabic', 'Amiri', 'Scheherazade New', serif",
+        default: "System",
+      }),
+    },
     translation: { fontFamily: "Inter_400Regular", marginBottom: 6, color: "#666" },
-    urdu: { textAlign: "right", fontFamily: "Inter_400Regular", fontStyle: "italic", marginBottom: 6 },
+    urdu: {
+      textAlign: "right",
+      fontFamily: Platform.select({
+        ios: "Noto Nastaliq Urdu",
+        android: "serif",
+        web: "'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif",
+        default: "System",
+      }),
+      marginBottom: 6,
+    },
 
     tafsirBox: { borderRadius: 10, borderWidth: 1, padding: 12, marginTop: 8 },
     tafsirLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginBottom: 6 },

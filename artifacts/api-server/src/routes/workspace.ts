@@ -35,11 +35,12 @@ router.post("/notes", requireAuth, async (req, res) => {
     return;
   }
   const { tags = [], ...rest } = parsed.data;
-  const [note] = await db.insert(notesTable).values({
+  const insertResult = await db.insert(notesTable).values({
     userId: user.id,
     ...rest,
     tags: JSON.stringify(tags),
-  }).returning();
+  });
+  const [note] = await db.select().from(notesTable).where(eq(notesTable.id, insertResult[0].insertId)).limit(1);
   await db.insert(activityLogTable).values({
     userId: user.id, type: "note_created", sourceId: note.id, description: `Created note: ${note.title}`, durationMinutes: 0,
   });
@@ -67,8 +68,9 @@ router.patch("/notes/:noteId", requireAuth, async (req, res) => {
   const { tags, ...rest } = parsed.data;
   const updateData: Record<string, any> = { ...rest, updatedAt: new Date() };
   if (tags !== undefined) updateData.tags = JSON.stringify(tags);
-  const [note] = await db.update(notesTable).set(updateData)
-    .where(and(eq(notesTable.id, req.params.noteId), eq(notesTable.userId, user.id))).returning();
+  await db.update(notesTable).set(updateData)
+    .where(and(eq(notesTable.id, req.params.noteId), eq(notesTable.userId, user.id)));
+  const [note] = await db.select().from(notesTable).where(and(eq(notesTable.id, req.params.noteId), eq(notesTable.userId, user.id))).limit(1);
   if (!note) {
     res.status(404).json({ message: "Note not found" });
     return;
@@ -108,7 +110,8 @@ router.post("/bookmarks", requireAuth, async (req, res) => {
     res.status(400).json({ message: "Invalid request body" });
     return;
   }
-  const [bookmark] = await db.insert(bookmarksTable).values({ userId: user.id, ...parsed.data }).returning();
+  const insertResult = await db.insert(bookmarksTable).values({ userId: user.id, ...parsed.data });
+  const [bookmark] = await db.select().from(bookmarksTable).where(eq(bookmarksTable.id, insertResult[0].insertId)).limit(1);
   res.status(201).json(bookmark);
 });
 
@@ -141,7 +144,8 @@ router.post("/folders", requireAuth, async (req, res) => {
     res.status(400).json({ message: "Invalid request body" });
     return;
   }
-  const [folder] = await db.insert(foldersTable).values({ userId: user.id, ...parsed.data }).returning();
+  const insertResult = await db.insert(foldersTable).values({ userId: user.id, ...parsed.data });
+  const [folder] = await db.select().from(foldersTable).where(eq(foldersTable.id, insertResult[0].insertId)).limit(1);
   res.status(201).json({ ...folder, noteCount: 0, bookmarkCount: 0 });
 });
 
@@ -165,8 +169,9 @@ router.patch("/folders/:folderId", requireAuth, async (req, res) => {
     res.status(400).json({ message: "Invalid request body" });
     return;
   }
-  const [folder] = await db.update(foldersTable).set(parsed.data)
-    .where(and(eq(foldersTable.id, req.params.folderId), eq(foldersTable.userId, user.id))).returning();
+  await db.update(foldersTable).set(parsed.data)
+    .where(and(eq(foldersTable.id, req.params.folderId), eq(foldersTable.userId, user.id)));
+  const [folder] = await db.select().from(foldersTable).where(and(eq(foldersTable.id, req.params.folderId), eq(foldersTable.userId, user.id))).limit(1);
   if (!folder) {
     res.status(404).json({ message: "Folder not found" });
     return;

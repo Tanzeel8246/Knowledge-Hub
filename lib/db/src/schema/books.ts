@@ -1,37 +1,38 @@
-import { pgTable, text, integer, uuid, boolean, index, timestamp } from "drizzle-orm/pg-core";
+import { mysqlTable, text, varchar, int, boolean, index, timestamp } from "drizzle-orm/mysql-core";
+import crypto from "crypto";
 
-export const bookCategoriesTable = pgTable("book_categories", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  nameArabic: text("name_arabic"),
-  sortOrder: integer("sort_order").notNull().default(0),
+export const bookCategoriesTable = mysqlTable("book_categories", {
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: varchar("name", { length: 255 }).notNull(),
+  nameArabic: varchar("name_arabic", { length: 255 }),
+  sortOrder: int("sort_order").notNull().default(0),
 });
 
-export const booksTable = pgTable("books", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  title: text("title").notNull(),
-  titleArabic: text("title_arabic"),
-  author: text("author").notNull(),
-  authorArabic: text("author_arabic"),
-  categoryId: uuid("category_id").notNull().references(() => bookCategoriesTable.id),
-  language: text("language").notNull().default("en"),
+export const booksTable = mysqlTable("books", {
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  title: varchar("title", { length: 255 }).notNull(),
+  titleArabic: varchar("title_arabic", { length: 255 }),
+  author: varchar("author", { length: 255 }).notNull(),
+  authorArabic: varchar("author_arabic", { length: 255 }),
+  categoryId: varchar("category_id", { length: 36 }).notNull().references(() => bookCategoriesTable.id),
+  language: varchar("language", { length: 16 }).notNull().default("en"),
   description: text("description"),
   coverUrl: text("cover_url"),
-  totalChapters: integer("total_chapters").notNull().default(0),
+  totalChapters: int("total_chapters").notNull().default(0),
   isPublic: boolean("is_public").notNull().default(true),
-  publishedYear: integer("published_year"),
+  publishedYear: int("published_year"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [
   index("books_category_idx").on(table.categoryId),
 ]);
 
-export const bookChaptersTable = pgTable("book_chapters", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  bookId: uuid("book_id").notNull().references(() => booksTable.id, { onDelete: "cascade" }),
-  chapterNumber: integer("chapter_number").notNull(),
-  title: text("title").notNull(),
-  titleArabic: text("title_arabic"),
+export const bookChaptersTable = mysqlTable("book_chapters", {
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bookId: varchar("book_id", { length: 36 }).notNull().references(() => booksTable.id, { onDelete: "cascade" }),
+  chapterNumber: int("chapter_number").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  titleArabic: varchar("title_arabic", { length: 255 }),
   content: text("content").notNull(),
   contentArabic: text("content_arabic"),
 }, (table) => [
