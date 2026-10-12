@@ -99,27 +99,35 @@ export default function SpiritualSuiteScreen() {
     return Math.min(100, base + bonus);
   };
 
+  useEffect(() => {
+    // Load last saved audit from AsyncStorage
+    AsyncStorage.getItem("@daily_muhasabah_history").then(raw => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.checks) setChecks(parsed.checks);
+          if (parsed.daroodCount) setDaroodCount(parsed.daroodCount);
+          if (parsed.notes) setSpiritualNotes(parsed.notes);
+        } catch {}
+      }
+    });
+  }, []);
+
   const saveMuhasabah = async () => {
     try {
       setSavedSuccess(true);
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      const token = await AsyncStorage.getItem("auth_token");
-      const domain = process.env.EXPO_PUBLIC_DOMAIN;
-      const url = domain ? `https://${domain}/api/spiritual/muhasabah` : `/api/spiritual/muhasabah`;
-      await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...checks,
-          daroodCount,
-          notes: spiritualNotes,
-        }),
-      });
+      const record = {
+        date: new Date().toISOString().split("T")[0],
+        timestamp: Date.now(),
+        checks,
+        daroodCount,
+        notes: spiritualNotes,
+        score: calculateScore(),
+      };
+      await AsyncStorage.setItem("@daily_muhasabah_history", JSON.stringify(record));
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch {}
   };

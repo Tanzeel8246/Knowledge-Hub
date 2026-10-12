@@ -19,9 +19,9 @@ import { useColors } from "@/hooks/useColors";
 import {
   calculateQiblaAzimuth,
   calculateSolarPosition,
-  findSolarQiblaAlignmentTimes,
+  calculateDailyShadowQiblaSchedule,
   checkRasadAlQibla,
-  DailySolarQiblaAlignment,
+  ShadowAngleTime,
 } from "@/utils/solarQibla";
 
 function getDistanceToKaaba(lat: number, lon: number): string {
@@ -53,16 +53,13 @@ export default function QiblaScreen() {
   const [aligned, setAligned] = useState(false);
   const [activeTab, setActiveTab] = useState<"compass" | "solar">("compass");
 
-  // Solar calibration data
+  // Comprehensive solar shadow schedule (180°, 135°, 90°, 45°, 0°)
   const [solarData, setSolarData] = useState<{
     sunAzimuth: number;
     sunAltitude: number;
-    angleDiff: number;
     shadowAngle: number;
-    directTime: string | null;
-    shadowTime: string | null;
-    isShadowNow: boolean;
-    isDirectNow: boolean;
+    angleDiff: number;
+    alignments: ShadowAngleTime[];
     rasadInfo: { isToday: boolean; eventName?: string; timeUtc?: string };
   } | null>(null);
 
@@ -73,7 +70,6 @@ export default function QiblaScreen() {
   const prevCompass = useRef(0);
   const prevNeedle = useRef(0);
 
-  // Glow pulse when aligned
   useEffect(() => {
     if (aligned) {
       const pulse = Animated.loop(
@@ -89,7 +85,6 @@ export default function QiblaScreen() {
     }
   }, [aligned, glowAnim]);
 
-  // Smooth rotation animation
   const animateRotation = (anim: Animated.Value, prev: React.MutableRefObject<number>, target: number) => {
     let delta = target - prev.current;
     if (delta > 180) delta -= 360;
@@ -107,25 +102,19 @@ export default function QiblaScreen() {
   const updateSolarCalculations = (lat: number, lon: number, qibla: number) => {
     const now = new Date();
     const pos = calculateSolarPosition(now, lat, lon);
-    const times = findSolarQiblaAlignmentTimes(now, lat, lon);
+    const schedule = calculateDailyShadowQiblaSchedule(now, lat, lon);
     const rasad = checkRasadAlQibla(now);
 
-    let diff = Math.abs(pos.azimuth - qibla);
-    if (diff > 180) diff = 360 - diff;
-
     const shadowAzimuth = (pos.azimuth + 180) % 360;
-    let shadowDiff = Math.abs(shadowAzimuth - qibla);
-    if (shadowDiff > 180) shadowDiff = 360 - shadowDiff;
+    let diff = Math.abs(shadowAzimuth - qibla);
+    if (diff > 180) diff = 360 - diff;
 
     setSolarData({
       sunAzimuth: pos.azimuth,
       sunAltitude: pos.altitude,
-      angleDiff: diff,
       shadowAngle: shadowAzimuth,
-      directTime: times.directTime,
-      shadowTime: times.shadowTime,
-      isShadowNow: shadowDiff < 1.5 && pos.altitude >= 2,
-      isDirectNow: diff < 1.5 && pos.altitude >= 2,
+      angleDiff: diff,
+      alignments: schedule,
       rasadInfo: rasad,
     });
   };
@@ -170,7 +159,6 @@ export default function QiblaScreen() {
             animateRotation(needleAnim, prevNeedle, relativeQibla);
           });
         } else {
-          // Static display on web
           animateRotation(needleAnim, prevNeedle, qibla);
         }
         setLoading(false);
@@ -183,7 +171,6 @@ export default function QiblaScreen() {
     return () => magSub?.remove();
   }, []);
 
-  // Periodic refresh of solar angles every minute
   useEffect(() => {
     if (!location) return;
     const interval = setInterval(() => {
@@ -237,7 +224,7 @@ export default function QiblaScreen() {
         >
           <MaterialCommunityIcons name="weather-sunny" size={18} color={activeTab === "solar" ? colors.gold : "#FFFFFF70"} />
           <Text style={[s.tabText, activeTab === "solar" && { color: colors.gold, fontFamily: "Inter_700Bold" }]}>
-            سایۂ آفتاب (Solar Shadow)
+            سایۂ آفتاب (180°, 135°, 90°)
           </Text>
         </TouchableOpacity>
       </View>
@@ -345,8 +332,8 @@ export default function QiblaScreen() {
           </View>
         </ScrollView>
       ) : (
-        /* ─── Solar & Shadow-based Qibla Calibration Tab ─── */
-        <ScrollView style={s.solarContainer} contentContainerStyle={{ paddingBottom: 40 }}>
+        /* ─── Solar & Comprehensive Shadow-based Qibla Calibration Tab ─── */
+        <ScrollView style={s.solarContainer} contentContainerStyle={{ paddingBottom: 50 }}>
           {/* Rasad al-Qibla Notice */}
           {solarData?.rasadInfo.isToday && (
             <View style={[s.rasadCard, { backgroundColor: "#FEF08A25", borderColor: "#EAB308" }]}>
@@ -360,25 +347,25 @@ export default function QiblaScreen() {
             </View>
           )}
 
-          {/* Solar Status Card */}
+          {/* Current Solar Status Card */}
           <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={s.cardHeader}>
               <MaterialCommunityIcons name="weather-sunny" size={22} color="#F59E0B" />
-              <Text style={[s.cardTitle, { color: colors.foreground }]}>سورج کا موجودہ زاویہ اور سایہ</Text>
+              <Text style={[s.cardTitle, { color: colors.foreground }]}>سورج اور سائے کا موجودہ فلکیاتی رخ</Text>
             </View>
 
             <View style={s.gridRow}>
               <View style={s.gridCol}>
                 <Text style={[s.colVal, { color: "#F59E0B" }]}>{solarData?.sunAzimuth.toFixed(1)}°</Text>
-                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>سورج کا رخ (Azimuth)</Text>
+                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>سورج کا زاویہ</Text>
               </View>
               <View style={s.gridCol}>
                 <Text style={[s.colVal, { color: colors.primary }]}>{solarData?.sunAltitude.toFixed(1)}°</Text>
-                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>بلندی (Altitude)</Text>
+                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>افق سے بلندی</Text>
               </View>
               <View style={s.gridCol}>
                 <Text style={[s.colVal, { color: colors.gold }]}>{solarData?.shadowAngle.toFixed(1)}°</Text>
-                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>سائے کا رخ (Shadow)</Text>
+                <Text style={[s.colLabel, { color: colors.mutedForeground }]}>سائے کا موجودہ رخ</Text>
               </View>
             </View>
 
@@ -389,80 +376,102 @@ export default function QiblaScreen() {
                 color={(solarData?.angleDiff ?? 99) < 2 ? "#22C55E" : colors.mutedForeground}
               />
               <Text style={[s.diffText, { color: (solarData?.angleDiff ?? 99) < 2 ? "#22C55E" : colors.foreground }]}>
-                قبلہ سے سورج کا فاصلہ: {solarData?.angleDiff.toFixed(1)}°
+                سائے کا قبلہ سے موجودہ فرق: {solarData?.angleDiff.toFixed(1)}°
               </Text>
             </View>
           </View>
 
-          {/* Daily Alignment Times */}
+          {/* ── Daily Angles Timetable (180°, 135°, 90°, 45°, 0°) ── */}
           <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={s.cardHeader}>
-              <MaterialCommunityIcons name="clock-outline" size={22} color={colors.primary} />
-              <Text style={[s.cardTitle, { color: colors.foreground }]}>آج کا سورج و سایہ سے قبلہ وقت</Text>
-            </View>
-
-            <View style={s.timingRow}>
-              <View style={s.timingIconCircle}>
-                <MaterialCommunityIcons name="ray-start-arrow" size={20} color="#F59E0B" />
-              </View>
+              <MaterialCommunityIcons name="timetable" size={22} color={colors.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.timingLabel, { color: colors.foreground }]}>سائے کی سیدھ سے قبلہ (بہترین طریقہ)</Text>
-                <Text style={[s.timingDesc, { color: colors.mutedForeground }]}>
-                  اس وقت عمودی لکڑی کا سایہ عین قبلہ کی مخالف سمت پڑے گا، یعنی سایہ دیکھ کر قبلہ متعین کریں:
+                <Text style={[s.cardTitle, { color: colors.foreground }]}>روزانہ سائے سے قبلہ درست کرنے کے اوقات</Text>
+                <Text style={[s.cardSub, { color: colors.mutedForeground }]}>
+                  سال کے ہر دن کے لیے مختلف زاویوں کے قطعی اوقات
                 </Text>
-              </View>
-              <View style={[s.timeBox, { backgroundColor: colors.navy }]}>
-                <Text style={s.timeBoxText}>{solarData?.shadowTime ?? "سایہ نہیں"}</Text>
               </View>
             </View>
 
-            <View style={[s.timingRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 }]}>
-              <View style={s.timingIconCircle}>
-                <MaterialCommunityIcons name="weather-sunny" size={20} color={colors.gold} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.timingLabel, { color: colors.foreground }]}>براہِ راست سورج سے قبلہ</Text>
-                <Text style={[s.timingDesc, { color: colors.mutedForeground }]}>
-                  اس وقت سورج کا رخ خود قبلہ کی ڈائریکشن میں ہوگا:
-                </Text>
-              </View>
-              <View style={[s.timeBox, { backgroundColor: colors.navy }]}>
-                <Text style={s.timeBoxText}>{solarData?.directTime ?? "اس دن نہیں"}</Text>
-              </View>
-            </View>
+            {solarData?.alignments.map((item, idx) => {
+              const isHighlight = item.angleDegrees === 180 || item.angleDegrees === 135 || item.angleDegrees === 90;
+              return (
+                <View
+                  key={idx}
+                  style={[
+                    s.timingRow,
+                    idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
+                  ]}
+                >
+                  <View style={[s.angleBadge, { backgroundColor: isHighlight ? colors.gold + "25" : colors.navy }]}>
+                    <Text style={[s.angleBadgeText, { color: isHighlight ? colors.gold : "#FFF" }]}>
+                      {item.angleDegrees}°
+                    </Text>
+                  </View>
+
+                  <View style={{ flex: 1, paddingRight: 6 }}>
+                    <Text style={[s.timingLabel, { color: colors.foreground }]}>{item.angleName}</Text>
+                    <Text style={[s.timingDesc, { color: colors.mutedForeground }]}>{item.descriptionUrdu}</Text>
+                    <Text style={[s.ruleText, { color: colors.primary }]}>{item.ruleUrdu}</Text>
+                  </View>
+
+                  <View style={[s.timeBox, { backgroundColor: item.time ? colors.navy : colors.muted }]}>
+                    <Text style={[s.timeBoxText, !item.time && { color: colors.mutedForeground }]}>
+                      {item.time ?? "آج نہیں"}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
           </View>
 
-          {/* Practical Method Step-by-Step */}
+          {/* Detailed Practical Guide */}
           <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={s.cardHeader}>
-              <Feather name="help-circle" size={20} color={colors.gold} />
-              <Text style={[s.cardTitle, { color: colors.foreground }]}>سورج کے سائے سے قبلہ درست کرنے کا شرعی طریقہ</Text>
+              <MaterialCommunityIcons name="lightbulb-on-outline" size={20} color={colors.gold} />
+              <Text style={[s.cardTitle, { color: colors.foreground }]}>سائے کے زاویوں (180°, 135°, 90°) سے قبلہ نکالنے کا طریقہ</Text>
             </View>
 
             <View style={s.stepItem}>
               <View style={[s.stepNum, { backgroundColor: colors.gold }]}>
                 <Text style={s.stepNumText}>۱</Text>
               </View>
-              <Text style={[s.stepText, { color: colors.foreground }]}>
-                اوپر دیئے گئے مقررہ وقت پر ایک ہموار اور دھوپ والی زمین پر بالکل سیدھی لکڑی یا شاقول (Plumb line) زمین میں 90 ڈگری پر کھڑی کریں۔
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.stepHeading, { color: colors.foreground }]}>180 ڈگری سایہ (مخالفِ شمس - عین قبلہ):</Text>
+                <Text style={[s.stepText, { color: colors.mutedForeground }]}>
+                  جب سورج قبلہ کے مخالف ہوتا ہے، تو لکڑی کا سایہ عین خانہ کعبہ کی سمت پڑتا ہے۔ لکڑی کی بنیاد سے سائے کے سرے کی طرف کی سیدھ ہی قطعی قبلہ ہے۔
+                </Text>
+              </View>
             </View>
 
             <View style={s.stepItem}>
               <View style={[s.stepNum, { backgroundColor: colors.gold }]}>
                 <Text style={s.stepNumText}>۲</Text>
               </View>
-              <Text style={[s.stepText, { color: colors.foreground }]}>
-                ٹھیک وقت پر لکڑی کے سائے کے آخری سرے سے لکڑی کی بنیاد کی طرف لکیر کھینچیں۔ یہ خط سیدھا قبلہ کی طرف اشارہ کرتا ہے۔
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.stepHeading, { color: colors.foreground }]}>135 ڈگری سایہ (تکمیلی زاویہ):</Text>
+                <Text style={[s.stepText, { color: colors.mutedForeground }]}>
+                  اگر 180° یا 90° کا وقت نہ ملے تو 135° کے وقت پر سائے کی لکیر سے 135 ڈگری (یعنی 90° جمع 45°) ناپ کر قبلہ کی لائن حاصل کی جا سکتی ہے۔
+                </Text>
+              </View>
             </View>
 
             <View style={s.stepItem}>
               <View style={[s.stepNum, { backgroundColor: colors.gold }]}>
                 <Text style={s.stepNumText}>۳</Text>
               </View>
-              <Text style={[s.stepText, { color: colors.foreground }]}>
-                یہ طریقہ قطب نما (Compass) میں لوہے یا برقی آلات کی مقناطیسی خرابی (Magnetic Deviation) سے 100% محفوظ اور یقینی ترین فلکیاتی طریقہ ہے۔
+              <View style={{ flex: 1 }}>
+                <Text style={[s.stepHeading, { color: colors.foreground }]}>90 ڈگری سایہ (عمودی زاویہ / گنیا):</Text>
+                <Text style={[s.stepText, { color: colors.mutedForeground }]}>
+                  90 ڈگری کے وقت پر سائے کی لکیر پر عام معمار کا گنیا (Right Angle Square 90°) رکھ کر کھینچا جانے والا خط سیدھا قبلہ کی طرف رخ کرے گا۔
+                </Text>
+              </View>
+            </View>
+
+            <View style={[s.proofBox, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
+              <Feather name="shield" size={16} color={colors.primary} />
+              <Text style={[s.proofText, { color: colors.foreground }]}>
+                یہ سائنسی و فلکیاتی طریقہ کسی بھی کمپاس کی لوہے یا بجلی کے تاروں سے پیدا ہونے والی خرابی سے بالکل پاک ہے اور مساجد کی محراب درست کرنے کے لیے سب سے معتبر مانا جاتا ہے۔
               </Text>
             </View>
           </View>
@@ -523,21 +532,27 @@ function makeStyles(colors: any) {
     card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 14 },
     cardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
     cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+    cardSub: { fontSize: 11, marginTop: 2 },
     gridRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
     gridCol: { flex: 1, alignItems: "center" },
     colVal: { fontSize: 18, fontFamily: "Inter_700Bold" },
     colLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 4 },
     diffBadge: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, borderRadius: 8 },
     diffText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-    timingRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
-    timingIconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#00000010", alignItems: "center", justifyContent: "center" },
-    timingLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+    timingRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
+    angleBadge: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+    angleBadgeText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+    timingLabel: { fontSize: 13, fontFamily: "Inter_700Bold" },
     timingDesc: { fontSize: 11, lineHeight: 16, marginTop: 2 },
-    timeBox: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+    ruleText: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 3 },
+    timeBox: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, minWidth: 64, alignItems: "center" },
     timeBoxText: { color: "#FFF", fontSize: 13, fontFamily: "Inter_700Bold" },
-    stepItem: { flexDirection: "row", gap: 10, marginBottom: 12, alignItems: "flex-start" },
-    stepNum: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+    stepItem: { flexDirection: "row", gap: 10, marginBottom: 14, alignItems: "flex-start" },
+    stepNum: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", marginTop: 2 },
     stepNumText: { color: "#FFF", fontSize: 11, fontFamily: "Inter_700Bold" },
-    stepText: { flex: 1, fontSize: 12, lineHeight: 18 },
+    stepHeading: { fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 2 },
+    stepText: { fontSize: 12, lineHeight: 18 },
+    proofBox: { flexDirection: "row", gap: 10, padding: 12, borderRadius: 10, borderWidth: 1, marginTop: 8, alignItems: "center" },
+    proofText: { flex: 1, fontSize: 11, lineHeight: 16 },
   });
 }

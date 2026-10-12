@@ -2,12 +2,15 @@
  * solarQibla.ts
  *
  * Astronomical calculations for Qibla direction, Solar position (Solar Azimuth & Altitude),
- * and the exact daily time when the Sun or its shadow aligns directly with the Qibla (Zill al-Qibla).
+ * and daily solar shadow calibration times (Daily Qibla by Shadow):
+ * - 0° / 180° Shadow Alignment (سایہ عین قبلہ کے رخ یا مخالف)
+ * - 90° Perpendicular Shadow (سایہ قبلہ پر 90 ڈگری کا زاویہ قائم کرے)
+ * - 135° / 45° Intermediate Shadow (سایہ قبلہ سے 135 یا 45 ڈگری زاویہ بنائے)
  *
- * References & Authorities:
+ * References:
  * 1. Jean Meeus, "Astronomical Algorithms", 2nd Ed.
  * 2. NOAA Solar Calculator equations.
- * 3. Classical Islamic Astronomy (البيروني، ابن الشاطر، وأعلام الفلك الشرعي).
+ * 3. Classical Islamic Astrolabe & Qibla shadow tables (البیرونی، مولانا ادریس کاندھلوی، وعلماءِ فلکیات دیوبند).
  */
 
 export interface SolarPosition {
@@ -15,17 +18,28 @@ export interface SolarPosition {
   altitude: number; // degrees above horizon (-90° to +90°)
 }
 
-export interface DailySolarQiblaAlignment {
-  qiblaAngle: number; // Qibla azimuth from True North
-  sunAzimuthNow: number; // Current Sun azimuth
-  sunAltitudeNow: number; // Current Sun altitude
-  angleDifference: number; // Current difference between Sun and Qibla
-  isDirectAlignment: boolean; // Is sun currently within +/- 1 degree of Qibla?
-  isShadowAlignment: boolean; // Is shadow currently within +/- 1 degree of Qibla?
-  alignmentTimeToday: string | null; // HH:MM time when Sun azimuth matches Qibla
-  shadowAlignmentTimeToday: string | null; // HH:MM time when Shadow points towards Qibla (Sun is Qibla + 180°)
-  isRasadAlQiblaDay: boolean; // May 27/28 or July 15/16 when Sun is directly above Kaaba at noon
-  rasadAlQiblaUtcTime?: string;
+export interface ShadowAngleTime {
+  angleName: string;
+  angleDegrees: number; // Target angle between shadow and Qibla (0°, 45°, 90°, 135°, 180°)
+  time: string | null;
+  sunAzimuth: number;
+  sunAltitude: number;
+  descriptionUrdu: string;
+  ruleUrdu: string;
+}
+
+export interface DailySolarQiblaReport {
+  qiblaAzimuth: number;
+  sunAzimuthNow: number;
+  sunAltitudeNow: number;
+  shadowAzimuthNow: number;
+  angleDiffNow: number;
+  alignments: ShadowAngleTime[];
+  rasadAlQibla: {
+    isToday: boolean;
+    eventName?: string;
+    timeUtc?: string;
+  };
 }
 
 const KAABA_LAT = 21.4225;
@@ -55,36 +69,26 @@ export function calculateQiblaAzimuth(lat: number, lon: number): number {
  * Calculates Solar Azimuth and Altitude for a given date and coordinates.
  */
 export function calculateSolarPosition(date: Date, lat: number, lon: number): SolarPosition {
-  // Julian Day
   const time = date.getTime();
   const julianDay = time / 86400000 + 2440587.5;
   const julianCentury = (julianDay - 2451545.0) / 36525.0;
 
-  // Geometric Mean Longitude of the Sun (degrees)
   let geomMeanLongSun =
     (280.46646 + julianCentury * (36000.76983 + julianCentury * 0.0003032)) % 360;
   if (geomMeanLongSun < 0) geomMeanLongSun += 360;
 
-  // Geometric Mean Anomaly of the Sun (degrees)
   const geomMeanAnomSun = 357.52911 + julianCentury * (35999.05029 - 0.0001537 * julianCentury);
-
-  // Eccentricity of Earth's Orbit
   const eccentEarthOrbit = 0.016708634 - julianCentury * (0.000042037 + 0.0000001267 * julianCentury);
 
-  // Sun's Equation of the Center
   const sunEqCtr =
     Math.sin(geomMeanAnomSun * DEG2RAD) *
       (1.914602 - julianCentury * (0.004817 + 0.000014 * julianCentury)) +
     Math.sin(2 * geomMeanAnomSun * DEG2RAD) * (0.019993 - 0.000101 * julianCentury) +
     Math.sin(3 * geomMeanAnomSun * DEG2RAD) * 0.000289;
 
-  // Sun's True Longitude
   const sunTrueLong = geomMeanLongSun + sunEqCtr;
-
-  // Sun's Apparent Longitude
   const sunAppLong = sunTrueLong - 0.00569 - 0.00478 * Math.sin((125.04 - 1934.136 * julianCentury) * DEG2RAD);
 
-  // Mean Obliquity of the Ecliptic
   const meanObliqEcliptic =
     23 +
     (26 +
@@ -93,13 +97,9 @@ export function calculateSolarPosition(date: Date, lat: number, lon: number): So
       60 /
       60;
 
-  // Obliquity Correction
   const obliqCorr = meanObliqEcliptic + 0.00256 * Math.cos((125.04 - 1934.136 * julianCentury) * DEG2RAD);
-
-  // Sun Declination
   const sunDeclin = Math.asin(Math.sin(obliqCorr * DEG2RAD) * Math.sin(sunAppLong * DEG2RAD)) * RAD2DEG;
 
-  // Equation of Time (minutes)
   const yVal = Math.tan((obliqCorr / 2) * DEG2RAD) * Math.tan((obliqCorr / 2) * DEG2RAD);
   const eqOfTime =
     4 *
@@ -110,17 +110,14 @@ export function calculateSolarPosition(date: Date, lat: number, lon: number): So
       0.5 * yVal * yVal * Math.sin(4 * geomMeanLongSun * DEG2RAD) -
       1.25 * eccentEarthOrbit * eccentEarthOrbit * Math.sin(2 * geomMeanAnomSun * DEG2RAD));
 
-  // True Solar Time
   const hours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
   const solarTimeFix = eqOfTime + 4 * lon;
   let trueSolarTime = (hours * 60 + solarTimeFix) % 1440;
   if (trueSolarTime < 0) trueSolarTime += 1440;
 
-  // Solar Hour Angle
   let hourAngle = trueSolarTime / 4 - 180;
   if (hourAngle < -180) hourAngle += 360;
 
-  // Solar Zenith & Altitude
   const latRad = lat * DEG2RAD;
   const declinRad = sunDeclin * DEG2RAD;
   const hourAngleRad = hourAngle * DEG2RAD;
@@ -129,79 +126,133 @@ export function calculateSolarPosition(date: Date, lat: number, lon: number): So
   const zenith = Math.acos(Math.max(-1, Math.min(1, csz))) * RAD2DEG;
   const altitude = 90 - zenith;
 
-  // Solar Azimuth
   let azimuth = 0;
   const cosAz = (Math.sin(declinRad) - Math.sin(latRad) * Math.cos(zenith * DEG2RAD)) /
     (Math.cos(latRad) * Math.sin(zenith * DEG2RAD));
   const clampedCosAz = Math.max(-1, Math.min(1, cosAz));
   azimuth = Math.acos(clampedCosAz) * RAD2DEG;
   if (hourAngle > 0) azimuth = (360 - azimuth) % 360;
-  azimuth = (azimuth + 180) % 360; // Azimuth from North (0° = North)
+  azimuth = (azimuth + 180) % 360;
 
   return { azimuth, altitude };
 }
 
 /**
- * Finds the exact minutes during the current day when:
- * 1. The Sun's azimuth matches the Qibla azimuth directly (Sun in direction of Qibla).
- * 2. The Sun's shadow aligns with the Qibla (Sun is opposite to Qibla: Qibla + 180°).
- * At this moment, the shadow of any straight vertical pole points EXACTLY to Qibla!
+ * Searches the entire day (from morning 05:30 to evening 18:30 in 1-minute steps)
+ * to locate all key solar shadow angles with respect to the Qibla:
+ * 1. 180° Shadow (سایہ قبلہ کی عین سمت): سورج قبلہ کے مخالف (Sun = Qibla + 180°) -> سائے کی سمت عین قبلہ
+ * 2. 0° Direct Sun / Shadow (سایہ قبلہ کی مخالف سمت): سورج قبلہ پر (Sun = Qibla) -> سایہ الٹ، لکڑی کی جڑ سے سورج قبلہ
+ * 3. 90° Perpendicular Shadow (قائمۃ الزاویہ): سایہ قبلہ کے رخ پر بالکل 90 ڈگری پر بنتا ہے
+ * 4. 135° Intermediate Angle: سایہ قبلہ سے ٹھیک 135 ڈگری پر (45 ڈگری کا تکمیلی زاویہ)
+ * 5. 45° Acute Angle: سایہ قبلہ سے 45 ڈگری پر
  */
-export function findSolarQiblaAlignmentTimes(
+export function calculateDailyShadowQiblaSchedule(
   date: Date,
   lat: number,
   lon: number
-): {
-  directTime: string | null;
-  shadowTime: string | null;
-} {
+): ShadowAngleTime[] {
   const qiblaAz = calculateQiblaAzimuth(lat, lon);
-  const oppositeQibla = (qiblaAz + 180) % 360;
 
-  let bestDirectDiff = 999;
-  let bestDirectDate: Date | null = null;
-
-  let bestShadowDiff = 999;
-  let bestShadowDate: Date | null = null;
-
-  // Scan through the current day in 2-minute increments from 05:00 to 19:30 local
-  const base = new Date(date);
-  base.setHours(4, 0, 0, 0);
-
-  for (let m = 0; m < 960; m += 2) {
-    const current = new Date(base.getTime() + m * 60 * 1000);
-    const { azimuth, altitude } = calculateSolarPosition(current, lat, lon);
-
-    // Sun must be above horizon (altitude >= 2°) for shadows to be clear and visible
-    if (altitude >= 2) {
-      // 1. Direct Sun alignment (Facing the Sun gives Qibla)
-      let dDiff = Math.abs(azimuth - qiblaAz);
-      if (dDiff > 180) dDiff = 360 - dDiff;
-      if (dDiff < bestDirectDiff && dDiff <= 1.5) {
-        bestDirectDiff = dDiff;
-        bestDirectDate = current;
-      }
-
-      // 2. Shadow Alignment (Opposite: Shadow points towards Qibla!)
-      // When Sun is opposite to Qibla, the shadow thrown by a stick points directly to Kaaba!
-      let sDiff = Math.abs(azimuth - oppositeQibla);
-      if (sDiff > 180) sDiff = 360 - sDiff;
-      if (sDiff < bestShadowDiff && sDiff <= 1.5) {
-        bestShadowDiff = sDiff;
-        bestShadowDate = current;
-      }
-    }
+  interface TargetSpec {
+    angleName: string;
+    angleDegrees: number;
+    targetShadowAzimuths: number[]; // Can have morning and afternoon matches
+    descriptionUrdu: string;
+    ruleUrdu: string;
   }
 
-  const formatHM = (d: Date | null) => {
-    if (!d) return null;
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
+  // Pre-calculate target shadow azimuths for each requested angle relative to Qibla:
+  // Note: Shadow Azimuth = (Sun Azimuth + 180) % 360
+  const targets: TargetSpec[] = [
+    {
+      angleName: "سایہ عین قبلہ پر (180° مخالفِ آفتاب)",
+      angleDegrees: 180,
+      targetShadowAzimuths: [qiblaAz], // Shadow matches Qibla direction exactly
+      descriptionUrdu: "اس وقت لکڑی کا سایہ عین خانہ کعبہ کی سمت پڑتا ہے۔",
+      ruleUrdu: "لکڑی سے سائے کے سرے کی طرف لکیر کھینچیں، یہی سیدھی قبلہ کی سمت ہے۔",
+    },
+    {
+      angleName: "سایہ اور قبلہ 135° ڈگری پر",
+      angleDegrees: 135,
+      targetShadowAzimuths: [(qiblaAz + 135) % 360, (qiblaAz - 135 + 360) % 360],
+      descriptionUrdu: "اس وقت سایہ قبلہ کی لائن سے ٹھیک 135 ڈگری کا زاویہ بناتا ہے۔",
+      ruleUrdu: "سائے کی لائن سے 135° گھما کر سیدھی لکیر لگائیں، وہی قبلہ کا رخ ہوگا۔",
+    },
+    {
+      angleName: "سایہ اور قبلہ 90° ڈگری پر (قائمہ)",
+      angleDegrees: 90,
+      targetShadowAzimuths: [(qiblaAz + 90) % 360, (qiblaAz - 90 + 360) % 360],
+      descriptionUrdu: "اس وقت سائے کا رخ قبلہ سے ٹھیک 90 ڈگری (قائمۃ الزاویہ) پر ہوتا ہے۔",
+      ruleUrdu: "سائے پر گنیا (Right Angle 90°) رکھ کر دائیں یا بائیں رخ کریں تو سیدھا قبلہ ملے گا۔",
+    },
+    {
+      angleName: "سایہ اور قبلہ 45° ڈگری پر",
+      angleDegrees: 45,
+      targetShadowAzimuths: [(qiblaAz + 45) % 360, (qiblaAz - 45 + 360) % 360],
+      descriptionUrdu: "اس وقت سایہ اور قبلہ کے درمیان صرف 45 ڈگری کا زاویہ ہوتا ہے۔",
+      ruleUrdu: "سائے کے رخ سے 45 ڈگری موڑنے پر قبلہ کا قطعی زاویہ حاصل ہوتا ہے۔",
+    },
+    {
+      angleName: "سورج عین قبلہ کی سمت (0° / سایہ الٹ)",
+      angleDegrees: 0,
+      targetShadowAzimuths: [(qiblaAz + 180) % 360], // Sun matches Qibla, shadow is opposite
+      descriptionUrdu: "اس وقت سورج بذاتِ خود قبلہ کی سمت میں چمک رہا ہوتا ہے۔",
+      ruleUrdu: "سائے کے سرے سے لکڑی کی بنیاد کی طرف دیکھیں، وہی سیدھا قبلہ ہے۔",
+    },
+  ];
 
-  return {
-    directTime: formatHM(bestDirectDate),
-    shadowTime: formatHM(bestShadowDate),
-  };
+  // We will scan across the daylight hours (05:30 to 18:45) in 1-minute steps
+  const base = new Date(date);
+  base.setHours(5, 0, 0, 0);
+
+  const results: ShadowAngleTime[] = [];
+
+  for (const t of targets) {
+    let bestDiff = 999;
+    let bestDate: Date | null = null;
+    let bestSunAz = 0;
+    let bestSunAlt = 0;
+
+    for (let m = 30; m <= 800; m += 1) {
+      const cur = new Date(base.getTime() + m * 60 * 1000);
+      const { azimuth, altitude } = calculateSolarPosition(cur, lat, lon);
+
+      // Must be visible above horizon (at least 2.5° altitude) for a clear sharp shadow
+      if (altitude >= 2.5) {
+        const shadowAz = (azimuth + 180) % 360;
+
+        for (const targetAz of t.targetShadowAzimuths) {
+          let diff = Math.abs(shadowAz - targetAz);
+          if (diff > 180) diff = 360 - diff;
+
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestDate = cur;
+            bestSunAz = azimuth;
+            bestSunAlt = altitude;
+          }
+        }
+      }
+    }
+
+    // Only accept if closest match is within 1.8 degrees
+    const timeFormatted =
+      bestDiff <= 1.8 && bestDate
+        ? bestDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : null;
+
+    results.push({
+      angleName: t.angleName,
+      angleDegrees: t.angleDegrees,
+      time: timeFormatted,
+      sunAzimuth: bestSunAz,
+      sunAltitude: bestSunAlt,
+      descriptionUrdu: t.descriptionUrdu,
+      ruleUrdu: t.ruleUrdu,
+    });
+  }
+
+  return results;
 }
 
 /**

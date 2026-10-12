@@ -82,6 +82,12 @@ function RootLayoutNav() {
       <Stack.Screen name="quran-juz" options={{ headerShown: false }} />
       <Stack.Screen name="glossary" options={{ headerShown: false }} />
       <Stack.Screen name="fasting-tracker" options={{ headerShown: false }} />
+      <Stack.Screen name="mosques" options={{ headerShown: false }} />
+      <Stack.Screen name="kids-corner" options={{ headerShown: false }} />
+      <Stack.Screen name="inheritance-calculator" options={{ headerShown: false }} />
+      <Stack.Screen name="research-suite" options={{ headerShown: false }} />
+      <Stack.Screen name="spiritual-suite" options={{ headerShown: false }} />
+      <Stack.Screen name="downloads" options={{ headerShown: false }} />
     </Stack>
   );
 }
