@@ -17,6 +17,7 @@ import { useColors } from "@/hooks/useColors";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 import { useBackgroundSync, formatTimeAgo } from "@/hooks/useBackgroundSync";
 import { useGetSurahs, useGetBooks } from "@workspace/api-client-react";
+import { FALLBACK_BOOKS } from "@/constants/booksData";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -128,7 +129,8 @@ export default function DownloadsScreen() {
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete All", style: "destructive", onPress: async () => {
-            const keys = Object.keys(index);
+            const safeIdx = (index && typeof index === "object" && !Array.isArray(index)) ? index : {};
+            const keys = Object.keys(safeIdx);
             for (const key of keys) await deleteDownload(key);
           }
         },
@@ -182,7 +184,7 @@ export default function DownloadsScreen() {
             </View>
           )}
         </TouchableOpacity>
-        {Object.keys(index).length > 0 && (
+        {index && typeof index === "object" && Object.keys(index).length > 0 && (
           <TouchableOpacity onPress={handleDeleteAll}>
             <Feather name="trash-2" size={20} color="#EF4444" />
           </TouchableOpacity>
@@ -425,7 +427,7 @@ export default function DownloadsScreen() {
             <Text style={[s.sectionNote, { color: colors.mutedForeground }]}>
               Download complete classical commentaries (Tafsir Tabari, Ibn Kathir, Qurtubi, Razi, Jalalayn) and fiqh/hadith manuals for offline study.
             </Text>
-            {(booksData?.books ?? []).map(b => {
+            {((booksData?.books && booksData.books.length > 0) ? booksData.books : FALLBACK_BOOKS).map(b => {
               const key = getBookKey(b.id);
               const status = getStatus(key);
               const prog = getProgress(key);

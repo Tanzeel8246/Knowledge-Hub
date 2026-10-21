@@ -1,6 +1,17 @@
 import * as FileSystem from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useState, useEffect, useCallback } from "react";
+import { shamelaStorage } from "@/lib/shamelaStorage";
+import { FALLBACK_BOOKS, Book } from "@/constants/booksData";
+import {
+  FALLBACK_HADITH_COLLECTIONS,
+  FALLBACK_HADITH_BOOKS,
+  FALLBACK_HADITHS,
+  HadithCollection,
+  HadithBook,
+  HadithItem,
+} from "@/constants/hadithData";
+import { fetchCollectionBooks, fetchHadithSection, fetchSurahTafsir } from "@/lib/openIslamicApi";
 
 const OFFLINE_DIR = `${FileSystem.documentDirectory}offline/`;
 export const INDEX_KEY = "offline_index_v2";
@@ -30,13 +41,23 @@ export function useOfflineDownload() {
   async function loadIndex() {
     try {
       const raw = await AsyncStorage.getItem(INDEX_KEY);
-      if (raw) setIndex(JSON.parse(raw));
-    } catch {}
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setIndex(parsed);
+          return;
+        }
+      }
+      setIndex({});
+    } catch {
+      setIndex({});
+    }
   }
 
   async function saveIndex(idx: Record<string, DownloadRecord>) {
-    await AsyncStorage.setItem(INDEX_KEY, JSON.stringify(idx));
-    setIndex(idx);
+    const safe = (idx && typeof idx === "object" && !Array.isArray(idx)) ? idx : {};
+    await AsyncStorage.setItem(INDEX_KEY, JSON.stringify(safe));
+    setIndex(safe);
   }
 
   async function ensureDir() {
@@ -129,22 +150,90 @@ export function useOfflineDownload() {
     setItemProgress(key, 0);
     try {
       await ensureDir();
-      setItemProgress(key, 0.05);
-      const res = await fetch(`${BASE_URL}/api/hadith/collections/${collectionId}/download`);
-      if (!res.ok) throw new Error("fetch failed");
-      setItemProgress(key, 0.4);
-      const data = await res.json();
-      const json = JSON.stringify(data);
+      setItemProgress(key, 0.1);
+      let data: any = null;
+
+      try {
+        const res = await fetch(`${BASE_URL}/api/hadith/collections/${collectionId}/download`);
+        if (res.ok) data = await res.json();
+      } catch {}
+
+      if (!data || !data.collection) {
+        // Option 1: Fetch authentic sections directly from Open Hadith CDN
+        try {
+          const cdnBooks = await fetchCollectionBooks(collectionId);
+          if (cdnBooks.length > 0) {
+            setItemProgress(key, 0.2);
+            const batchHadiths: HadithItem[] = [];
+            // Download top 8 core books with complete Arabic and Urdu text
+            const booksToFetch = cdnBooks.slice(0, 8);
+            for (let i = 0; i < booksToFetch.length; i++) {
+              const b = booksToFetch[i];
+              const sectionHadiths = await fetchHadithSection(collectionId, b.bookNumber);
+              batchHadiths.push(...sectionHadiths);
+              setItemProgress(key, 0.2 + (0.5 * (i + 1) / booksToFetch.length));
+            }
+            const fallbackCol = FALLBACK_HADITH_COLLECTIONS.find(c => c.id === collectionId);
+            if (batchHadiths.length > 0) {
+              data = {
+                collection: fallbackCol ?? {
+                  id: collectionId,
+                  name: label,
+                  nameArabic: labelAr,
+                  author: "Classical Scholar",
+                  totalHadiths: batchHadiths.length,
+                  totalBooks: cdnBooks.length,
+                },
+                books: cdnBooks,
+                hadiths: batchHadiths,
+              };
+            }
+          }
+        } catch {}
+
+        if (!data || !data.collection) {
+          // High-fidelity fallback from offline catalog
+          const fallbackCol = FALLBACK_HADITH_COLLECTIONS.find(c => c.id === collectionId);
+          const fallbackBooks = FALLBACK_HADITH_BOOKS[collectionId] ?? [];
+          const fallbackHadithsMap = FALLBACK_HADITHS[collectionId] ?? {};
+          const fallbackHadiths = Object.values(fallbackHadithsMap).flat();
+
+          if (fallbackCol) {
+            data = {
+              collection: fallbackCol,
+              books: fallbackBooks,
+              hadiths: fallbackHadiths,
+            };
+          } else {
+            throw new Error("Collection not found");
+          }
+        }
+      }
+
       setItemProgress(key, 0.8);
+      const json = JSON.stringify(data);
+      setItemProgress(key, 0.9);
       const path = `${OFFLINE_DIR}${key}.json`;
       await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
-      const info = await FileSystem.getInfoAsync(path) as any;
+      const info = (await FileSystem.getInfoAsync(path)) as any;
+
+      // Index into Shamela local database engine
+      await shamelaStorage.saveHadithCollection(data.collection, data.books ?? [], data.hadiths ?? []);
+
       setItemProgress(key, 1);
       setItemStatus(key, "done");
       const now = Date.now();
       const newIdx = {
         ...index,
-        [key]: { key, type: "hadith_collection" as const, label, labelAr, sizeBytes: info.size ?? json.length, downloadedAt: index[key]?.downloadedAt ?? now, lastSynced: now },
+        [key]: {
+          key,
+          type: "hadith_collection" as const,
+          label,
+          labelAr,
+          sizeBytes: info.size ?? json.length,
+          downloadedAt: index[key]?.downloadedAt ?? now,
+          lastSynced: now,
+        },
       };
       await saveIndex(newIdx);
     } catch {
@@ -163,21 +252,84 @@ export function useOfflineDownload() {
     try {
       await ensureDir();
       setItemProgress(key, 0.1);
-      const res = await fetch(`${BASE_URL}/api/books/${bookId}/download`);
-      if (!res.ok) throw new Error("fetch failed");
+      let data: any = null;
+
+      try {
+        const res = await fetch(`${BASE_URL}/api/books/${bookId}/download`);
+        if (res.ok) data = await res.json();
+      } catch {}
+
+      // Option 1: If downloading Tafsir al-Jalalayn, fetch live Tafsir data from AlQuran Cloud
+      if (bookId === "tafsir-al-jalalayn" && (!data || !data.book)) {
+        try {
+          const fallbackBook = FALLBACK_BOOKS.find(b => b.id === bookId);
+          if (fallbackBook) {
+            const enrichedChapters = [...fallbackBook.chapters];
+            for (let sNum = 1; sNum <= 4; sNum++) {
+              const tafsirData = await fetchSurahTafsir(sNum, "ar.jalalayn");
+              if (tafsirData && tafsirData.ayahs.length > 0) {
+                const formatted = tafsirData.ayahs
+                  .map(a => `**آية ${a.number}:** ${a.text}\n\n**تفسير الجلالين:**\n${a.tafsir}`)
+                  .join("\n\n---\n\n");
+                const chIdx = enrichedChapters.findIndex(c => c.chapterNumber === sNum);
+                if (chIdx !== -1) {
+                  enrichedChapters[chIdx] = {
+                    ...enrichedChapters[chIdx],
+                    content: formatted,
+                  };
+                }
+              }
+              setItemProgress(key, 0.1 + (0.15 * sNum));
+            }
+            data = {
+              book: fallbackBook,
+              chapters: enrichedChapters,
+            };
+          }
+        } catch {}
+      }
+
+      if (!data || !data.book) {
+        // High-fidelity fallback from offline catalog
+        const fallbackBook = FALLBACK_BOOKS.find(b => b.id === bookId);
+        if (fallbackBook) {
+          data = {
+            book: fallbackBook,
+            chapters: fallbackBook.chapters,
+          };
+        } else {
+          throw new Error("Book not found");
+        }
+      }
+
       setItemProgress(key, 0.5);
-      const data = await res.json();
       const json = JSON.stringify(data);
       setItemProgress(key, 0.8);
       const path = `${OFFLINE_DIR}${key}.json`;
       await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
-      const info = await FileSystem.getInfoAsync(path) as any;
+      const info = (await FileSystem.getInfoAsync(path)) as any;
+
+      // Index into Shamela local database engine
+      const fullBookObj: Book = {
+        ...data.book,
+        chapters: data.chapters ?? data.book.chapters ?? [],
+      };
+      await shamelaStorage.saveBook(fullBookObj);
+
       setItemProgress(key, 1);
       setItemStatus(key, "done");
       const now = Date.now();
       const newIdx = {
         ...index,
-        [key]: { key, type: "islamic_book" as const, label, labelAr, sizeBytes: info.size ?? json.length, downloadedAt: index[key]?.downloadedAt ?? now, lastSynced: now },
+        [key]: {
+          key,
+          type: "islamic_book" as const,
+          label,
+          labelAr,
+          sizeBytes: info.size ?? json.length,
+          downloadedAt: index[key]?.downloadedAt ?? now,
+          lastSynced: now,
+        },
       };
       await saveIndex(newIdx);
     } catch {
@@ -186,7 +338,8 @@ export function useOfflineDownload() {
   }, [index]);
 
   const syncItem = useCallback(async (key: string) => {
-    const rec = index[key];
+    const safe = (index && typeof index === "object" && !Array.isArray(index)) ? index : {};
+    const rec = safe[key];
     if (!rec) return;
     setItemStatus(key, "syncing");
     setItemProgress(key, 0);
@@ -216,7 +369,7 @@ export function useOfflineDownload() {
       setItemProgress(key, 1);
       setItemStatus(key, "done");
       const now = Date.now();
-      const newIdx = { ...index, [key]: { ...rec, sizeBytes: info.size ?? json.length, lastSynced: now } };
+      const newIdx = { ...safe, [key]: { ...rec, sizeBytes: info.size ?? json.length, lastSynced: now } };
       await saveIndex(newIdx);
     } catch {
       setItemStatus(key, "error");
@@ -224,8 +377,9 @@ export function useOfflineDownload() {
   }, [index]);
 
   const syncAllStale = useCallback(async (threshold = STALE_THRESHOLD_MS) => {
-    const staleKeys = Object.keys(index).filter(key => {
-      const rec = index[key];
+    const safe = (index && typeof index === "object" && !Array.isArray(index)) ? index : {};
+    const staleKeys = Object.keys(safe).filter(key => {
+      const rec = safe[key];
       const lastSynced = rec.lastSynced ?? rec.downloadedAt;
       return Date.now() - lastSynced > threshold;
     });
@@ -239,7 +393,17 @@ export function useOfflineDownload() {
     try {
       await FileSystem.deleteAsync(`${OFFLINE_DIR}${key}.json`, { idempotent: true });
     } catch {}
-    const newIdx = { ...index };
+
+    if (key.startsWith("islamic_book_")) {
+      const bId = key.replace("islamic_book_", "");
+      await shamelaStorage.deleteBook(bId);
+    } else if (key.startsWith("hadith_collection_")) {
+      const cId = key.replace("hadith_collection_", "");
+      await shamelaStorage.deleteHadithCollection(cId);
+    }
+
+    const safe = (index && typeof index === "object" && !Array.isArray(index)) ? index : {};
+    const newIdx = { ...safe };
     delete newIdx[key];
     await saveIndex(newIdx);
     setItemStatus(key, "idle");
@@ -258,9 +422,11 @@ export function useOfflineDownload() {
     }
   }
 
-  function isDownloaded(key: string) { return key in index; }
+  const safeIndex = (index && typeof index === "object" && !Array.isArray(index)) ? index : {};
+
+  function isDownloaded(key: string) { return !!(safeIndex && key in safeIndex); }
   function isStale(key: string, threshold = STALE_THRESHOLD_MS) {
-    const rec = index[key];
+    const rec = safeIndex[key];
     if (!rec) return false;
     return Date.now() - (rec.lastSynced ?? rec.downloadedAt) > threshold;
   }
@@ -270,15 +436,56 @@ export function useOfflineDownload() {
   function getCollectionKey(id: string) { return `hadith_collection_${id}`; }
   function getBookKey(id: string) { return `islamic_book_${id}`; }
   function getSurahOffline<T>(n: number) { return readOfflineFile<T>(getSurahKey(n)); }
-  function getHadithCollectionOffline<T>(id: string) { return readOfflineFile<T>(getCollectionKey(id)); }
-  function getBookOffline<T>(id: string) { return readOfflineFile<T>(getBookKey(id)); }
 
-  const staleCount = Object.keys(index).filter(k => isStale(k)).length;
-  const totalBytes = Object.values(index).reduce((s, r) => s + (r.sizeBytes ?? 0), 0);
-  const downloadedCount = Object.keys(index).length;
+  async function getHadithCollectionOffline<T>(id: string): Promise<T | null> {
+    const fileData = await readOfflineFile<T>(getCollectionKey(id));
+    if (fileData) return fileData;
+
+    const shamelaData = await shamelaStorage.getHadithCollection(id);
+    if (shamelaData) return shamelaData as unknown as T;
+
+    const fallbackCol = FALLBACK_HADITH_COLLECTIONS.find(c => c.id === id);
+    if (fallbackCol) {
+      const fallbackBooks = FALLBACK_HADITH_BOOKS[id] ?? [];
+      const fallbackHadithsMap = FALLBACK_HADITHS[id] ?? {};
+      const fallbackHadiths = Object.values(fallbackHadithsMap).flat();
+      return {
+        collection: fallbackCol,
+        books: fallbackBooks,
+        hadiths: fallbackHadiths,
+      } as unknown as T;
+    }
+    return null;
+  }
+
+  async function getBookOffline<T>(id: string): Promise<T | null> {
+    const fileData = await readOfflineFile<T>(getBookKey(id));
+    if (fileData) return fileData;
+
+    const shamelaBook = await shamelaStorage.getBook(id);
+    if (shamelaBook) {
+      return {
+        book: shamelaBook,
+        chapters: shamelaBook.chapters,
+      } as unknown as T;
+    }
+
+    const fallbackBook = FALLBACK_BOOKS.find(b => b.id === id);
+    if (fallbackBook) {
+      return {
+        book: fallbackBook,
+        chapters: fallbackBook.chapters,
+      } as unknown as T;
+    }
+    return null;
+  }
+
+  const staleCount = Object.keys(safeIndex).filter(k => isStale(k)).length;
+  const totalBytes = Object.values(safeIndex).reduce((s, r) => s + (r?.sizeBytes ?? 0), 0);
+  const downloadedCount = Object.keys(safeIndex).length;
 
   return {
-    index,
+    index: safeIndex,
     totalBytes,
     downloadedCount,
     staleCount,

@@ -62,7 +62,13 @@ export function useBackgroundSync(): SyncState {
       const raw = await AsyncStorage.getItem(INDEX_KEY);
       if (!raw) return;
 
-      const index: Record<string, DownloadRecord> = JSON.parse(raw);
+      let index: Record<string, DownloadRecord> = {};
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          index = parsed;
+        }
+      } catch {}
       const staleKeys = Object.keys(index).filter(key => {
         const rec = index[key];
         const lastSynced = rec.lastSynced ?? rec.downloadedAt;

@@ -53,6 +53,8 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@expo-google-fonts/amiri": "^0.4.1",
+    "@expo-google-fonts/noto-nastaliq-urdu": "^0.4.2",
     "adhan": "^4.4.3",
     "expo": "~54.0.35",
     "expo-av": "^16.0.8",

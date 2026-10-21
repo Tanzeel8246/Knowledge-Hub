@@ -15,6 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetBook, useGetBookChapters } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 import { FALLBACK_BOOKS } from "@/constants/booksData";
 
 export default function BookDetailScreen() {
@@ -39,8 +40,10 @@ export default function BookDetailScreen() {
     }
   }, [bookId]);
 
-  const book = offlineData?.book ?? apiBook ?? fallbackBook;
-  const chapters = offlineData?.chapters ?? apiChapters ?? fallbackBook?.chapters;
+  const book = fallbackBook ?? offlineData?.book ?? apiBook;
+  const chapters = (fallbackBook?.chapters && fallbackBook.chapters.length >= (offlineData?.chapters?.length ?? 0))
+    ? fallbackBook.chapters
+    : (offlineData?.chapters ?? apiChapters ?? fallbackBook?.chapters);
   const s = makeStyles(colors);
   const isLoading = !book && (!offlineData && (bookLoading || chaptersLoading));
 

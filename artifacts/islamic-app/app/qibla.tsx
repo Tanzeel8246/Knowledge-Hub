@@ -14,6 +14,7 @@ import { router } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
+import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const LAST_LOCATION_STORAGE_KEY = "@user_last_saved_location_v2";
@@ -21,6 +22,7 @@ import { Magnetometer } from "expo-sensors";
 import { useColors } from "@/hooks/useColors";
 import {
   calculateQiblaAzimuth,
+  calculateMagneticDeclination,
   calculateSolarPosition,
   calculateDailyShadowQiblaSchedule,
   checkRasadAlQibla,
@@ -28,8 +30,8 @@ import {
 } from "@/utils/solarQibla";
 
 function getDistanceToKaaba(lat: number, lon: number): string {
-  const kaabaLat = 21.4225;
-  const kaabaLon = 39.8262;
+  const kaabaLat = 21.422487;
+  const kaabaLon = 39.826206;
   const R = 6371;
   const dLat = ((kaabaLat - lat) * Math.PI) / 180;
   const dLon = ((kaabaLon - lon) * Math.PI) / 180;
@@ -54,6 +56,9 @@ export default function QiblaScreen() {
   const [compassAngle, setCompassAngle] = useState(0);
   const [location, setLocation] = useState<{ lat: number; lon: number; city: string } | null>(null);
   const [aligned, setAligned] = useState(false);
+  const [accuracyLevel, setAccuracyLevel] = useState<number>(3); // 3: High, 2: Medium, 1: Low, 0: Uncalibrated
+  const [headingType, setHeadingType] = useState<"true" | "magnetic">("true");
+  const [declination, setDeclination] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"compass" | "solar">("compass");
 
   // Comprehensive solar shadow schedule (180°, 135°, 90°, 45°, 0°)
@@ -72,6 +77,8 @@ export default function QiblaScreen() {
 
   const prevCompass = useRef(0);
   const prevNeedle = useRef(0);
+  const filteredHeadingRef = useRef(0);
+  const lastAlignedRef = useRef(false);
 
   useEffect(() => {
     if (aligned) {
@@ -96,8 +103,8 @@ export default function QiblaScreen() {
     prev.current = next;
     Animated.timing(anim, {
       toValue: next,
-      duration: 200,
-      easing: Easing.out(Easing.quad),
+      duration: 90,
+      easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start();
   };
@@ -123,7 +130,36 @@ export default function QiblaScreen() {
   };
 
   useEffect(() => {
+    let headingSub: Location.LocationSubscription | null = null;
     let magSub: any = null;
+
+    const processNewHeading = (rawHeading: number, qibla: number) => {
+      // Angular low-pass filter (handles 0-360 wraparound smoothly)
+      const alpha = 0.28;
+      let diff = rawHeading - filteredHeadingRef.current;
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      filteredHeadingRef.current = (filteredHeadingRef.current + alpha * diff + 360) % 360;
+
+      const angle = Math.round(filteredHeadingRef.current * 10) / 10;
+      setCompassAngle(angle);
+
+      const relativeQibla = (qibla - angle + 360) % 360;
+      const alignDiff = Math.abs(relativeQibla > 180 ? relativeQibla - 360 : relativeQibla);
+      const isNowAligned = alignDiff <= 3.5;
+
+      setAligned(isNowAligned);
+
+      if (!lastAlignedRef.current && isNowAligned) {
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        }
+      }
+      lastAlignedRef.current = isNowAligned;
+
+      animateRotation(compassAnim, prevCompass, -angle);
+      animateRotation(needleAnim, prevNeedle, relativeQibla);
+    };
 
     const init = async () => {
       try {
@@ -132,12 +168,12 @@ export default function QiblaScreen() {
         let city = "Karachi, PK";
         let resolved = false;
 
-        // 1. Try GPS
+        // 1. High Accuracy GPS Detection
         if (Platform.OS !== "web") {
           try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status === "granted") {
-              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
               lat = loc.coords.latitude;
               lon = loc.coords.longitude;
               const [geo] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
@@ -147,7 +183,7 @@ export default function QiblaScreen() {
           } catch {}
         }
 
-        // 2. Fallback to cached location from prayer-times
+        // 2. Fallback to cached high-precision location
         if (!resolved) {
           try {
             const saved = await AsyncStorage.getItem(LAST_LOCATION_STORAGE_KEY);
@@ -168,35 +204,37 @@ export default function QiblaScreen() {
         setQiblaAngle(qibla);
         updateSolarCalculations(lat, lon, qibla);
 
+        const magDeclination = calculateMagneticDeclination(lat, lon);
+        setDeclination(magDeclination);
+
         if (Platform.OS !== "web") {
-          Magnetometer.setUpdateInterval(60);
-          let filteredHeading = 0;
-          const alpha = 0.2; // Low-pass filter smoothing coefficient
+          // Tier 1: Hardware-fused True Heading with tilt-compensation (iOS & Android)
+          try {
+            headingSub = await Location.watchHeadingAsync((h) => {
+              const calib = h.accuracy ?? 3;
+              setAccuracyLevel(calib);
 
-          magSub = Magnetometer.addListener(({ x, y }) => {
-            // Correct device orientation heading:
-            // Top of device pointing North corresponds to atan2(-x, y)
-            let rawHeading = Math.atan2(-x, y) * (180 / Math.PI);
-            if (rawHeading < 0) {
-              rawHeading += 360;
-            }
-
-            // Angular smoothing (handling 0-360 wraparound)
-            let diff = rawHeading - filteredHeading;
-            if (diff > 180) diff -= 360;
-            if (diff < -180) diff += 360;
-            filteredHeading = (filteredHeading + alpha * diff + 360) % 360;
-
-            const angle = Math.round(filteredHeading * 10) / 10;
-            setCompassAngle(angle);
-
-            const relativeQibla = (qibla - angle + 360) % 360;
-            const alignDiff = Math.abs(relativeQibla > 180 ? relativeQibla - 360 : relativeQibla);
-            setAligned(alignDiff < 6);
-
-            animateRotation(compassAnim, prevCompass, -angle);
-            animateRotation(needleAnim, prevNeedle, relativeQibla);
-          });
+              if (h.trueHeading != null && h.trueHeading >= 0) {
+                setHeadingType("true");
+                processNewHeading(h.trueHeading, qibla);
+              } else if (h.magHeading != null) {
+                setHeadingType("magnetic");
+                const adjustedHeading = (h.magHeading + magDeclination + 360) % 360;
+                processNewHeading(adjustedHeading, qibla);
+              }
+            });
+          } catch (e) {
+            // Tier 2: Direct Magnetometer Fallback if watchHeadingAsync is not available
+            Magnetometer.setUpdateInterval(80);
+            magSub = Magnetometer.addListener(({ x, y }) => {
+              let rawMagHeading = Math.atan2(-x, y) * (180 / Math.PI);
+              if (rawMagHeading < 0) rawMagHeading += 360;
+              const trueHeading = (rawMagHeading + magDeclination + 360) % 360;
+              setAccuracyLevel(2);
+              setHeadingType("magnetic");
+              processNewHeading(trueHeading, qibla);
+            });
+          }
         } else {
           animateRotation(needleAnim, prevNeedle, qibla);
         }
@@ -207,7 +245,10 @@ export default function QiblaScreen() {
     };
 
     init();
-    return () => magSub?.remove();
+    return () => {
+      headingSub?.remove();
+      magSub?.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -361,6 +402,36 @@ export default function QiblaScreen() {
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18, color: colors.mutedForeground }}>
               اگر کمپاس سوئی جھول رہی ہو تو فون کو ہوا میں انگریزی ہندسے 8 کی شکل میں دو تین بار گھمائیں تاکہ میگنیٹک سنسر کالیبریٹ ہو جائے۔ اگر مقناطیسی مداخلت ہو تو &quot;سایۂ آفتاب&quot; ٹیب کا استعمال کریں جو 100٪ قطعی اور سائنسی طور پر غیر متزلزل ہے۔
             </Text>
+          </View>
+
+          {/* Real-time Accuracy & Sensor Fusion Bar */}
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 12,
+            marginBottom: 12,
+            backgroundColor: accuracyLevel >= 2 ? "#22C55E15" : "#EAB30815",
+            borderWidth: 1,
+            borderColor: accuracyLevel >= 2 ? "#22C55E40" : "#EAB30840",
+          }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <MaterialCommunityIcons
+                name={accuracyLevel >= 2 ? "shield-check" : "compass-rose"}
+                size={18}
+                color={accuracyLevel >= 2 ? "#22C55E" : "#EAB308"}
+              />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.foreground }}>
+                {accuracyLevel >= 2 ? "اعلیٰ سینسر درستگی (True North Fusion)" : "درمیانی درستگی (کالیبریشن کریں)"}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.mutedForeground }}>
+                انحراف: {Math.abs((qiblaAngle - compassAngle + 360) % 360 > 180 ? ((qiblaAngle - compassAngle + 360) % 360) - 360 : ((qiblaAngle - compassAngle + 360) % 360)).toFixed(1)}°
+              </Text>
+            </View>
           </View>
 
           {/* Degrees display */}

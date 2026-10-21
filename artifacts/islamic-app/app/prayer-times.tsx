@@ -434,7 +434,7 @@ export default function PrayerTimesScreen() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === "granted") {
           const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
+            accuracy: Location.Accuracy.High,
           });
           const [geo] = await Location.reverseGeocodeAsync({
             latitude: loc.coords.latitude,

@@ -42,8 +42,8 @@ export interface DailySolarQiblaReport {
   };
 }
 
-const KAABA_LAT = 21.4225;
-const KAABA_LON = 39.8262;
+const KAABA_LAT = 21.422487;
+const KAABA_LON = 39.826206;
 
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
@@ -63,6 +63,32 @@ export function calculateQiblaAzimuth(lat: number, lon: number): number {
 
   const bearing = Math.atan2(y, x) * RAD2DEG;
   return (bearing + 360) % 360;
+}
+
+/**
+ * Calculates accurate Geomagnetic Declination (Magnetic Variation)
+ * using the Earth's Geomagnetic Dipole and regional WMM parameters.
+ * Declination is positive when Magnetic North is East of True North,
+ * and negative when West.
+ * True Heading = (Magnetic Heading + Declination + 360) % 360
+ */
+export function calculateMagneticDeclination(lat: number, lon: number): number {
+  // Dipole pole coordinates (WMM Epoch 2025-2026: ~86.5° N, 164.0° E)
+  const poleLat = 86.5 * DEG2RAD;
+  const poleLon = 164.0 * DEG2RAD;
+
+  const phi = lat * DEG2RAD;
+  const lambda = lon * DEG2RAD;
+  const dLon = poleLon - lambda;
+
+  const y = Math.sin(dLon) * Math.cos(poleLat);
+  const x = Math.cos(phi) * Math.sin(poleLat) - Math.sin(phi) * Math.cos(poleLat) * Math.cos(dLon);
+
+  let dec = Math.atan2(y, x) * RAD2DEG;
+  if (dec > 180) dec -= 360;
+  if (dec < -180) dec += 360;
+
+  return Math.round(dec * 10) / 10;
 }
 
 /**

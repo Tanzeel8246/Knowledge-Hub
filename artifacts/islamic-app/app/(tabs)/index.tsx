@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -13,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetProgressDashboard } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Gregorian to Hijri (Kuwaiti algorithm)
@@ -82,6 +84,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { language, setLanguage, t, isUrdu, isArabic } = useLanguage();
   const { data: progress } = useGetProgressDashboard();
 
   const greeting = () => {
@@ -128,11 +131,12 @@ export default function HomeScreen() {
     { icon: "mosque", label: "اوقاتِ صلوٰۃ", labelEn: "Prayer Times", route: "/prayer-times", color: "#0891B2" },
     { icon: "compass", label: "قبلہ و شمسی سایہ", labelEn: "Qibla & Sun", route: "/qibla", color: "#7C3AED" },
     { icon: "script-text-outline", label: "کتبِ حدیث", labelEn: "Hadith", route: "/hadith", color: colors.gold },
-    { icon: "shield-check", label: "فتاویٰ آرکائیو", labelEn: "Fatawa", route: "/fatawa-archive", color: "#B45309" },
+    { icon: "book-search", label: "البحث الشامل", labelEn: "Shamela Search", route: "/research-search", color: "#D97706" },
     { icon: "library", label: "اسلامی لائبریری", labelEn: "Books", route: "/books", color: colors.primary },
   ];
 
   const quickActions = [
+    { icon: "book-search", label: "Shamela Search", route: "/research-search", color: "#D97706" },
     { icon: "book-open-variant", label: "Read Quran", route: "/quran", color: colors.teal },
     { icon: "script-text-outline", label: "Hadith", route: "/hadith", color: colors.gold },
     { icon: "library", label: "Books", route: "/books", color: colors.primary },
@@ -204,7 +208,37 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[s.content, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 20), paddingBottom: insets.bottom + 100 }]}
       >
-        {/* Header */}
+        {/* Brand Bar: Logo + App Name (المفتاح) + Dynamic Language Switcher */}
+        <View style={s.brandBar}>
+          <View style={s.brandLeft}>
+            <Image
+              source={require("@/assets/images/app-logo.png")}
+              style={s.appLogo}
+              resizeMode="contain"
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={[s.brandName, { color: colors.foreground }]}>{t.appName}</Text>
+              <Text style={[s.brandSubtitle, { color: colors.gold }]} numberOfLines={1}>{t.appSubtitle}</Text>
+            </View>
+          </View>
+
+          {/* Dynamic Language Switcher */}
+          <View style={[s.langPillsWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            {(["ur", "en", "ar"] as const).map(l => (
+              <TouchableOpacity
+                key={l}
+                style={[s.langPill, language === l && { backgroundColor: colors.primary }]}
+                onPress={() => setLanguage(l)}
+              >
+                <Text style={[s.langPillText, { color: language === l ? "#FFF" : colors.mutedForeground }]}>
+                  {l === "ur" ? "اردو" : l === "en" ? "EN" : "عربي"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Greeting Header */}
         <View style={s.header}>
           <View>
             <Text style={[s.greeting, { color: colors.mutedForeground }]}>{greeting()}</Text>
@@ -222,13 +256,13 @@ export default function HomeScreen() {
           <View style={s.dateLeft}>
             <Text style={s.hijriDate}>{hijri.day}</Text>
             <View>
-              <Text style={[s.hijriMonth, { color: colors.gold }]}>{HIJRI_MONTHS_AR[hijri.month - 1]}</Text>
+              <Text style={[s.hijriMonth, { color: colors.gold }]}>ہجری: {HIJRI_MONTHS_AR[hijri.month - 1]}</Text>
               <Text style={s.hijriYear}>{hijri.year} AH</Text>
             </View>
           </View>
           <View style={[s.dateDivider, { backgroundColor: "#FFFFFF20" }]} />
           <View style={s.dateRight}>
-            <Text style={s.hijriNameEn}>{HIJRI_MONTHS[hijri.month - 1]}</Text>
+            <Text style={s.hijriNameEn}>عیسوی تاریخ</Text>
             <Text style={s.gregDate}>{gregFormatted}</Text>
           </View>
           <Feather name="chevron-right" size={16} color="#FFFFFF50" />
@@ -413,6 +447,54 @@ function makeStyles(colors: any) {
   return StyleSheet.create({
     container: { flex: 1 },
     content: { paddingHorizontal: 16 },
+
+    brandBar: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    brandLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      flex: 1,
+    },
+    appLogo: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+    },
+    brandName: {
+      fontSize: 20,
+      fontFamily: "Inter_700Bold",
+      letterSpacing: -0.3,
+    },
+    brandSubtitle: {
+      fontSize: 11,
+      fontFamily: "Inter_500Medium",
+      marginTop: 1,
+    },
+    langPillsWrap: {
+      flexDirection: "row",
+      borderRadius: 20,
+      padding: 3,
+      borderWidth: 1,
+      gap: 2,
+    },
+    langPill: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 14,
+    },
+    langPillText: {
+      fontSize: 11,
+      fontFamily: "Inter_600SemiBold",
+    },
+
     header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
     greeting: { fontSize: 13, fontFamily: "Inter_400Regular" },
     name: { fontSize: 22, fontFamily: "Inter_700Bold" },

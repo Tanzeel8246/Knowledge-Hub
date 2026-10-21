@@ -18,6 +18,7 @@ import { useColors } from "@/hooks/useColors";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 
 import { SURAH_LIST } from "@/constants/quranData";
+import { matchesArabicQuery } from "@/lib/arabicSearch";
 
 const LAST_READ_KEY = "quran_last_read_v1";
 
@@ -46,7 +47,14 @@ export default function QuranScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem(LAST_READ_KEY).then(val => {
-      if (val) setLastRead(JSON.parse(val));
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (parsed && typeof parsed === "object") {
+            setLastRead(parsed);
+          }
+        } catch {}
+      }
     });
   }, []);
 
@@ -54,7 +62,7 @@ export default function QuranScreen() {
     const matchSearch =
       s.nameEnglish.toLowerCase().includes(search.toLowerCase()) ||
       s.nameTransliteration.toLowerCase().includes(search.toLowerCase()) ||
-      s.nameArabic.includes(search) ||
+      matchesArabicQuery(s.nameArabic, search) ||
       String(s.number).includes(search);
     const matchFilter = filter === "all" || s.revelationType === filter;
     return matchSearch && matchFilter;
@@ -244,7 +252,7 @@ function makeStyles(colors: any) {
     container: { flex: 1 },
     header: { paddingHorizontal: 16, paddingBottom: 10 },
     headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
-    title: { fontSize: 28, lineHeight: 40, marginBottom: 2 },
+    title: { fontSize: 28, lineHeight: 44, marginBottom: 2, fontFamily: "Amiri_700Bold" },
     subtitle: { fontSize: 13, fontFamily: "Inter_400Regular" },
     headerBtns: { flexDirection: "row", gap: 8, marginTop: 4 },
     iconBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
@@ -277,7 +285,7 @@ function makeStyles(colors: any) {
     revChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
     revChipText: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
     right: { alignItems: "flex-end" },
-    arabic: { fontSize: 22, lineHeight: 32 },
+    arabic: { fontSize: 24, lineHeight: 38, fontFamily: "Amiri_700Bold" },
 
     empty: { alignItems: "center", marginTop: 60, gap: 8 },
     emptyText: { fontSize: 16, fontFamily: "Inter_600SemiBold", marginTop: 8 },

@@ -6,9 +6,11 @@ import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function TabLayout() {
   const colors = useColors();
+  const { t } = useLanguage();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
@@ -44,7 +46,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: t.home,
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="house" tintColor={color} size={24} />
@@ -56,7 +58,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="quran"
         options={{
-          title: "Quran",
+          title: t.quran,
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="book" tintColor={color} size={24} />
@@ -68,7 +70,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="hadith"
         options={{
-          title: "Hadith",
+          title: t.hadith,
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="scroll" tintColor={color} size={24} />
@@ -78,9 +80,21 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="library"
+        options={{
+          title: t.library,
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="books.vertical" tintColor={color} size={24} />
+            ) : (
+              <MaterialCommunityIcons name="bookshelf" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
         name="learn"
         options={{
-          title: "Learn",
+          title: t.learn,
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="graduationcap" tintColor={color} size={24} />
@@ -92,13 +106,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="workspace"
         options={{
-          title: "Workspace",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="folder" tintColor={color} size={24} />
-            ) : (
-              <Feather name="folder" size={22} color={color} />
-            ),
+          href: null,
         }}
       />
     </Tabs>

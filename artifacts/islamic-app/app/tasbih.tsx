@@ -16,8 +16,56 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { Audio } from "expo-av";
 import { useColors } from "@/hooks/useColors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+function generateBeepDataUri(): string {
+  const sampleRate = 8000;
+  const duration = 0.22; // 220ms pleasant beep
+  const numSamples = Math.floor(sampleRate * duration);
+  const freq = 880; // 880 Hz
+  const header = new Uint8Array(44 + numSamples);
+
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) header[offset + i] = str.charCodeAt(i);
+  };
+  const writeUint32 = (offset: number, val: number) => {
+    header[offset] = val & 0xff;
+    header[offset + 1] = (val >> 8) & 0xff;
+    header[offset + 2] = (val >> 16) & 0xff;
+    header[offset + 3] = (val >> 24) & 0xff;
+  };
+  const writeUint16 = (offset: number, val: number) => {
+    header[offset] = val & 0xff;
+    header[offset + 1] = (val >> 8) & 0xff;
+  };
+
+  writeString(0, "RIFF");
+  writeUint32(4, 36 + numSamples);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  writeUint32(16, 16);
+  writeUint16(20, 1);
+  writeUint16(22, 1);
+  writeUint32(24, sampleRate);
+  writeUint32(28, sampleRate);
+  writeUint16(32, 1);
+  writeUint16(34, 8);
+  writeString(36, "data");
+  writeUint32(40, numSamples);
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const fade = i > numSamples - 150 ? (numSamples - i) / 150 : 1;
+    const sample = Math.sin(2 * Math.PI * freq * t) * 0.5 * fade;
+    header[44 + i] = Math.floor((sample + 1) * 127.5);
+  }
+
+  let binary = "";
+  for (let i = 0; i < header.length; i++) binary += String.fromCharCode(header[i]);
+  return "data:audio/wav;base64," + (typeof btoa !== "undefined" ? btoa(binary) : "");
+}
 
 interface DhikrPreset {
   id: string;
@@ -72,6 +120,40 @@ export default function TasbihScreen() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [vibrateEnabled, setVibrateEnabled] = useState(true);
 
+  // Target completion & sound controls
+  const [targetReachedModal, setTargetReachedModal] = useState(false);
+  const [allowOverflow, setAllowOverflow] = useState(false);
+  const [showAdjustTargetModal, setShowAdjustTargetModal] = useState(false);
+  const [customTargetInput, setCustomTargetInput] = useState("");
+
+  const playBeep = async () => {
+    try {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.22);
+          return;
+        }
+      }
+      const uri = generateBeepDataUri();
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      await sound.playAsync();
+    } catch {}
+  };
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
@@ -109,6 +191,16 @@ export default function TasbihScreen() {
   }, [scaleAnim]);
 
   const handleCount = useCallback(async () => {
+    // If target already reached and user did not permit overflow, stop and alert!
+    if (count >= selected.target && !allowOverflow) {
+      setTargetReachedModal(true);
+      await playBeep();
+      if (vibrateEnabled && Platform.OS !== "web") {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+      return;
+    }
+
     const newCount = count + 1;
     setCount(newCount);
     setTotalSession(t => t + 1);
@@ -126,6 +218,8 @@ export default function TasbihScreen() {
     }).start();
 
     if (newCount === selected.target) {
+      setTargetReachedModal(true);
+      await playBeep();
       if (vibrateEnabled && Platform.OS !== "web") {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -136,11 +230,11 @@ export default function TasbihScreen() {
         target: selected.target,
         date: new Date().toISOString(),
       };
-      const updated = [entry, ...history].slice(0, 100); // keep last 100
+      const updated = [entry, ...history].slice(0, 100);
       setHistory(updated);
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
-  }, [count, selected, animatePress, vibrateEnabled, history, progressAnim, sessionMap]);
+  }, [count, selected, allowOverflow, animatePress, vibrateEnabled, history, progressAnim, sessionMap]);
 
   const handleReset = () => {
     if (count > 0 && count < selected.target) {
@@ -167,8 +261,25 @@ export default function TasbihScreen() {
     const nextCount = sessionMap[preset.id] || 0;
     setSelected(preset);
     setCount(nextCount);
+    setAllowOverflow(false);
     progressAnim.setValue(Math.min(nextCount / preset.target, 1));
     setShowPresets(false);
+  };
+
+  const handleIncreaseTarget = (added: number) => {
+    const newTarget = selected.target + added;
+    setSelected(prev => ({ ...prev, target: newTarget }));
+    setAllowOverflow(false);
+    setShowAdjustTargetModal(false);
+    setTargetReachedModal(false);
+  };
+
+  const handleSetCustomTarget = (newTarget: number) => {
+    if (newTarget <= 0 || isNaN(newTarget)) return;
+    setSelected(prev => ({ ...prev, target: newTarget }));
+    setAllowOverflow(false);
+    setShowAdjustTargetModal(false);
+    setTargetReachedModal(false);
   };
 
   const saveCustomDhikr = () => {
@@ -466,6 +577,113 @@ export default function TasbihScreen() {
           )}
         </View>
       </Modal>
+
+      {/* Target Reached Modal */}
+      <Modal visible={targetReachedModal} transparent animationType="fade" onRequestClose={() => setTargetReachedModal(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.completeCard, { backgroundColor: colors.card, borderColor: colors.gold }]}>
+            <View style={[s.completeIconCircle, { backgroundColor: colors.gold + "20" }]}>
+              <Feather name="check-circle" size={42} color={colors.gold} />
+            </View>
+            <Text style={[s.completeTitle, { color: colors.foreground }]}>ہدف مکمل ہو گیا!</Text>
+            <Text style={[s.completeSub, { color: colors.mutedForeground }]}>
+              آپ نے {selected.transliteration} کی مقرر کردہ تعداد ({selected.target}) مکمل کر لی ہے۔
+            </Text>
+
+            <View style={s.completeActions}>
+              {/* Option 1: Reset & Start Over */}
+              <TouchableOpacity
+                style={[s.completeActionBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  handleReset();
+                  setAllowOverflow(false);
+                  setTargetReachedModal(false);
+                }}
+              >
+                <Feather name="rotate-ccw" size={16} color="#FFF" />
+                <Text style={s.completeActionBtnText}>نئے سرے سے شروع کریں (Reset)</Text>
+              </TouchableOpacity>
+
+              {/* Option 2: Allow Overflow */}
+              <TouchableOpacity
+                style={[s.completeActionBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
+                onPress={() => {
+                  setAllowOverflow(true);
+                  setTargetReachedModal(false);
+                }}
+              >
+                <Feather name="play-circle" size={16} color={colors.foreground} />
+                <Text style={[s.completeActionBtnText, { color: colors.foreground }]}>مزید آگے جاری رکھیں (Continue)</Text>
+              </TouchableOpacity>
+
+              {/* Option 3: Increase Target */}
+              <TouchableOpacity
+                style={[s.completeActionBtn, { backgroundColor: colors.gold + "20", borderColor: colors.gold, borderWidth: 1 }]}
+                onPress={() => {
+                  setTargetReachedModal(false);
+                  setShowAdjustTargetModal(true);
+                }}
+              >
+                <Feather name="plus-circle" size={16} color={colors.gold} />
+                <Text style={[s.completeActionBtnText, { color: colors.gold }]}>تعداد / ہدف میں اضافہ کریں</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Adjust Target Modal */}
+      <Modal visible={showAdjustTargetModal} transparent animationType="slide" onRequestClose={() => setShowAdjustTargetModal(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.completeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.completeTitle, { color: colors.foreground }]}>ہدف میں اضافہ کریں</Text>
+            <Text style={[s.completeSub, { color: colors.mutedForeground }]}>
+              موجودہ ہدف: {selected.target} تسبیحات
+            </Text>
+
+            <View style={s.quickTargetRow}>
+              {[33, 67, 100].map(addVal => (
+                <TouchableOpacity
+                  key={addVal}
+                  style={[s.quickTargetChip, { backgroundColor: colors.primary + "15", borderColor: colors.primary }]}
+                  onPress={() => handleIncreaseTarget(addVal)}
+                >
+                  <Text style={[s.quickTargetChipText, { color: colors.primary }]}>+{addVal} ({selected.target + addVal})</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={{ marginTop: 12, marginBottom: 16 }}>
+              <TextInput
+                style={[s.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
+                placeholder="نیا ہدف درج کریں (مثلاً 500)"
+                placeholderTextColor={colors.mutedForeground}
+                keyboardType="numeric"
+                value={customTargetInput}
+                onChangeText={setCustomTargetInput}
+              />
+            </View>
+
+            <View style={s.customModalActions}>
+              <TouchableOpacity style={s.customBtn} onPress={() => setShowAdjustTargetModal(false)}>
+                <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" }}>منسوخ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.customBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  const val = parseInt(customTargetInput, 10);
+                  if (val > 0) {
+                    handleSetCustomTarget(val);
+                    setCustomTargetInput("");
+                  }
+                }}
+              >
+                <Text style={{ color: "#FFF", fontFamily: "Inter_600SemiBold" }}>محفوظ کریں</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -524,6 +742,16 @@ function makeStyles(colors: any) {
     presetTargetText: { fontSize: 13, fontFamily: "Inter_700Bold" },
     
     modalOverlay: { flex: 1, backgroundColor: "#00000080", alignItems: "center", justifyContent: "center", padding: 20 },
+    completeCard: { width: "100%", maxWidth: 360, borderRadius: 24, padding: 24, borderWidth: 1.5, alignItems: "center" },
+    completeIconCircle: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+    completeTitle: { fontSize: 22, fontFamily: "Inter_700Bold", marginBottom: 8, textAlign: "center" },
+    completeSub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20, marginBottom: 20 },
+    completeActions: { width: "100%", gap: 10 },
+    completeActionBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: 14 },
+    completeActionBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#FFF" },
+    quickTargetRow: { flexDirection: "row", gap: 8, width: "100%", marginBottom: 8 },
+    quickTargetChip: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+    quickTargetChipText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
     customModal: { width: "100%", borderRadius: 20, padding: 20, borderWidth: 1 },
     customModalTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 16 },
     input: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, marginBottom: 12, fontFamily: "Inter_400Regular" },

@@ -134,8 +134,8 @@ export function usePrayerNotifications() {
           title: `🕌 ${label.name} Prayer — ${label.arabic}`,
           body: `${label.name} prayer begins in ${p.minutesBefore} minutes. Time to prepare for Salah.`,
           sound: true,
-          channelId: "prayer-alerts",
-        },
+          ...(Platform.OS === "android" ? { channelId: "prayer-alerts" } : {}),
+        } as any,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: triggerTime,

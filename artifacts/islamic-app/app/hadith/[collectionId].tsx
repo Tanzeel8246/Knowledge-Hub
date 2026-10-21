@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetHadithBooks, useGetHadithCollections } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
+import { FALLBACK_HADITH_COLLECTIONS, FALLBACK_HADITH_BOOKS, HadithBook } from "@/constants/hadithData";
+import { fetchCollectionBooks } from "@/lib/openIslamicApi";
 
 export default function HadithCollectionScreen() {
   const colors = useColors();
@@ -21,8 +23,30 @@ export default function HadithCollectionScreen() {
   const { collectionId } = useLocalSearchParams<{ collectionId: string }>();
   const { data: books, isLoading } = useGetHadithBooks(collectionId);
   const { data: collections } = useGetHadithCollections();
-  const collection = collections?.find(c => c.id === collectionId);
-  const { downloadHadithCollection, deleteDownload, getStatus, getProgress, getCollectionKey } = useOfflineDownload();
+  const collection = collections?.find(c => c.id === collectionId) ?? FALLBACK_HADITH_COLLECTIONS.find(c => c.id === collectionId);
+  const { downloadHadithCollection, deleteDownload, getStatus, getProgress, getCollectionKey, getHadithCollectionOffline } = useOfflineDownload();
+  const [offlineData, setOfflineData] = React.useState<{ collection: any; books: HadithBook[]; hadiths: any[] } | null>(null);
+  const [cdnBooks, setCdnBooks] = React.useState<HadithBook[]>([]);
+
+  React.useEffect(() => {
+    if (collectionId) {
+      getHadithCollectionOffline<{ collection: any; books: HadithBook[]; hadiths: any[] }>(collectionId).then(data => {
+        if (data && data.books && data.books.length > 0) setOfflineData(data);
+      });
+      fetchCollectionBooks(collectionId).then(list => {
+        if (list && list.length > 0) setCdnBooks(list);
+      });
+    }
+  }, [collectionId]);
+
+  const fallbackBooks = FALLBACK_HADITH_BOOKS[collectionId ?? ""] ?? [];
+  const displayBooks = (cdnBooks.length > 0)
+    ? cdnBooks
+    : (offlineData?.books && offlineData.books.length > 0)
+    ? offlineData.books
+    : (books && books.length > 0)
+    ? books
+    : fallbackBooks;
   const colKey = getCollectionKey(collectionId ?? "");
   const offlineStatus = getStatus(colKey);
   const offlineProg = getProgress(colKey);
@@ -74,7 +98,7 @@ export default function HadithCollectionScreen() {
         <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={books ?? []}
+          data={displayBooks}
           keyExtractor={item => `${item.collectionId}-${item.bookNumber}`}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}

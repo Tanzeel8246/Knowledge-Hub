@@ -29,9 +29,11 @@ import { FALLBACK_SURAHS, SURAH_LIST } from "@/constants/quranData";
 
 const LAST_READ_KEY = "quran_last_read_v1";
 const FONT_SIZE_KEY = "quran_font_size_v1";
+const VIEW_MODE_KEY = "quran_view_mode_v1";
 
 type RepeatMode = "none" | "ayah" | "surah";
 type DisplayMode = "translation" | "transliteration" | "both" | "arabic-only";
+export type QuranViewMode = "arabic" | "urdu" | "english" | "both";
 
 interface AyahItem {
   numberInSurah: number;
@@ -47,18 +49,21 @@ export default function SurahReaderScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { surahNumber } = useLocalSearchParams<{ surahNumber: string }>();
-  const surahNum = Number(surahNumber);
+  const parsedNum = Number(surahNumber);
+  const surahNum = (!isNaN(parsedNum) && parsedNum >= 1 && parsedNum <= 114) ? parsedNum : 1;
   const { data: apiSurah, isLoading: apiLoading } = useGetSurah(surahNum);
   const [offlineChecked, setOfflineChecked] = useState(false);
   const createBookmark = useCreateBookmark();
   const queryClient = useQueryClient();
 
   // Display settings
-  const [showTranslation, setShowTranslation] = useState(true);
+  const [viewMode, setViewMode] = useState<QuranViewMode>("urdu");
+  const [showArabic, setShowArabic] = useState(true);
+  const [showUrdu, setShowUrdu] = useState(true);
+  const [showEnglish, setShowEnglish] = useState(false);
   const [showTafsir, setShowTafsir] = useState(false);
   const [arabicFontSize, setArabicFontSize] = useState(24);
   const [translationFontSize, setTranslationFontSize] = useState(14);
-  const [showUrdu, setShowUrdu] = useState(true);
 
   // Audio
   const [selectedReciter, setSelectedReciter] = useState<Reciter>(DEFAULT_RECITER);
@@ -78,26 +83,80 @@ export default function SurahReaderScreen() {
   const [isFetchingPublic, setIsFetchingPublic] = useState(false);
   const { getSurahOffline, downloadSurah, deleteDownload, getStatus, getSurahKey } = useOfflineDownload();
 
-  const fallbackData = FALLBACK_SURAHS[surahNum];
   const meta = SURAH_LIST.find(s => s.number === surahNum);
+  const fallbackData = FALLBACK_SURAHS[surahNum] || (meta ? {
+    number: surahNum,
+    nameArabic: meta.nameArabic,
+    nameTransliteration: meta.nameTransliteration,
+    nameEnglish: meta.nameEnglish,
+    revelationType: meta.revelationType,
+    totalAyahs: meta.totalAyahs,
+    ayahs: [
+      {
+        numberInSurah: 1,
+        arabic: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+        translationUr: "شروع اللہ کے نام سے جو بڑا مہربان نہایت رحم والا ہے",
+        translationEn: "In the name of Allah, the Entirely Merciful, the Especially Merciful.",
+        juzNumber: 1,
+        pageNumber: 1,
+      }
+    ]
+  } : undefined);
   const surah = offlineSurah ?? apiSurah ?? publicFetchedSurah ?? fallbackData;
-  const isLoading = !offlineChecked || (!surah && (apiLoading || isFetchingPublic));
+  const isLoading = !surah && (!offlineChecked || apiLoading || isFetchingPublic);
   const surahOfflineKey = getSurahKey(surahNum);
   const offlineStatus = getStatus(surahOfflineKey);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const s = makeStyles(colors, arabicFontSize, translationFontSize);
 
-  // Load saved font size
+  const applyViewMode = (mode: QuranViewMode) => {
+    setViewMode(mode);
+    if (mode === "arabic") {
+      setShowArabic(true);
+      setShowUrdu(false);
+      setShowEnglish(false);
+    } else if (mode === "urdu") {
+      setShowArabic(true);
+      setShowUrdu(true);
+      setShowEnglish(false);
+    } else if (mode === "english") {
+      setShowArabic(true);
+      setShowUrdu(false);
+      setShowEnglish(true);
+    } else if (mode === "both") {
+      setShowArabic(true);
+      setShowUrdu(true);
+      setShowEnglish(true);
+    }
+  };
+
+  // Load saved font size and view mode
   useEffect(() => {
     AsyncStorage.getItem(FONT_SIZE_KEY).then(val => {
       if (val) {
-        const { arabic, translation } = JSON.parse(val);
-        setArabicFontSize(arabic ?? 24);
-        setTranslationFontSize(translation ?? 14);
+        try {
+          const parsed = JSON.parse(val);
+          if (parsed && typeof parsed === "object") {
+            setArabicFontSize(parsed.arabic ?? 24);
+            setTranslationFontSize(parsed.translation ?? 14);
+          } else if (typeof parsed === "number") {
+            setArabicFontSize(parsed);
+          }
+        } catch {}
+      }
+    });
+    AsyncStorage.getItem(VIEW_MODE_KEY).then(val => {
+      if (val && ["arabic", "urdu", "english", "both"].includes(val)) {
+        applyViewMode(val as QuranViewMode);
       }
     });
   }, []);
+
+  const handleSetViewMode = (mode: QuranViewMode) => {
+    applyViewMode(mode);
+    AsyncStorage.setItem(VIEW_MODE_KEY, mode);
+  };
 
   // Save font size on change
   useEffect(() => {
@@ -123,13 +182,14 @@ export default function SurahReaderScreen() {
 
   useEffect(() => {
     getSurahOffline<any>(surahNum).then(async data => {
-      if (data) {
+      if (data && data.ayahs && (!meta || data.ayahs.length >= meta.totalAyahs)) {
         setOfflineSurah(data);
         setOfflineChecked(true);
       } else {
         setOfflineChecked(true);
-        // If no offline data and no fallbackData, fetch from public open Quran CDN
-        if (!FALLBACK_SURAHS[surahNum] && !apiSurah) {
+        // If no offline data or offline data was partial, fetch complete authentic surah from open Quran API
+        const needsFullFetch = !apiSurah || (meta && (apiSurah.ayahs?.length ?? 0) < meta.totalAyahs);
+        if (needsFullFetch) {
           try {
             setIsFetchingPublic(true);
             const res = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/editions/quran-uthmani,ur.jalandhry,en.sahih`);
@@ -139,21 +199,21 @@ export default function SurahReaderScreen() {
                 const arData = json.data[0];
                 const urData = json.data[1];
                 const enData = json.data[2];
-                const formattedAyahs = arData.ayahs.map((a: any, idx: number) => ({
-                  numberInSurah: a.numberInSurah,
-                  arabic: a.text,
-                  translationUr: urData.ayahs[idx]?.text ?? "",
-                  translationEn: enData.ayahs[idx]?.text ?? "",
+                const formattedAyahs = (arData.ayahs || []).map((a: any, idx: number) => ({
+                  numberInSurah: a.numberInSurah ?? (idx + 1),
+                  arabic: a.text ?? "",
+                  translationUr: urData.ayahs?.[idx]?.text ?? "",
+                  translationEn: enData.ayahs?.[idx]?.text ?? "",
                   juzNumber: a.juz,
                   pageNumber: a.page,
                 }));
                 const builtSurah = {
                   number: surahNum,
-                  nameArabic: arData.name,
-                  nameTransliteration: arData.englishName,
-                  nameEnglish: arData.englishNameTranslation,
+                  nameArabic: arData.name ?? meta?.nameArabic ?? "",
+                  nameTransliteration: arData.englishName ?? meta?.nameTransliteration ?? `Surah ${surahNum}`,
+                  nameEnglish: arData.englishNameTranslation ?? meta?.nameEnglish ?? "",
                   revelationType: arData.revelationType === "Meccan" ? "Meccan" : "Medinan",
-                  totalAyahs: arData.numberOfAyahs,
+                  totalAyahs: arData.numberOfAyahs ?? formattedAyahs.length,
                   ayahs: formattedAyahs,
                 };
                 setPublicFetchedSurah(builtSurah);
@@ -167,7 +227,7 @@ export default function SurahReaderScreen() {
         }
       }
     });
-  }, [surahNum, apiSurah]);
+  }, [surahNum, apiSurah, meta]);
 
   const playAyah = useCallback(async (index: number) => {
     if (!surah?.ayahs) return;
@@ -336,9 +396,9 @@ export default function SurahReaderScreen() {
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={[s.headerTitle, { color: colors.foreground }]}>{surah.nameTransliteration}</Text>
+          <Text style={[s.headerTitle, { color: colors.foreground }]}>{surah?.nameTransliteration ?? meta?.nameTransliteration ?? `Surah ${surahNum}`}</Text>
           <Text style={[s.headerSub, { color: colors.mutedForeground }]}>
-          {surah.totalAyahs} ayahs · {surah.revelationType}
+          {surah?.totalAyahs ?? meta?.totalAyahs ?? 0} ayahs · {surah?.revelationType ?? meta?.revelationType ?? "Meccan"}
           {offlineStatus === "done" ? "  ·  🟢 Offline" : ""}
         </Text>
         </View>
@@ -361,10 +421,46 @@ export default function SurahReaderScreen() {
         </View>
       </View>
 
+      {/* ── Mode Selector: صرف قرآن | اردو ترجمہ | انگریزی ترجمہ ── */}
+      <View style={[s.viewModeBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          style={[s.modeTab, viewMode === "arabic" && { backgroundColor: colors.primary }]}
+          onPress={() => handleSetViewMode("arabic")}
+        >
+          <Text style={[s.modeTabText, { color: viewMode === "arabic" ? colors.primaryForeground : colors.mutedForeground }]}>
+            صرف قرآن
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.modeTab, viewMode === "urdu" && { backgroundColor: colors.primary }]}
+          onPress={() => handleSetViewMode("urdu")}
+        >
+          <Text style={[s.modeTabText, { color: viewMode === "urdu" ? colors.primaryForeground : colors.mutedForeground }]}>
+            اردو ترجمہ
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.modeTab, viewMode === "english" && { backgroundColor: colors.primary }]}
+          onPress={() => handleSetViewMode("english")}
+        >
+          <Text style={[s.modeTabText, { color: viewMode === "english" ? colors.primaryForeground : colors.mutedForeground }]}>
+            English
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.modeTab, viewMode === "both" && { backgroundColor: colors.primary }]}
+          onPress={() => handleSetViewMode("both")}
+        >
+          <Text style={[s.modeTabText, { color: viewMode === "both" ? colors.primaryForeground : colors.mutedForeground }]}>
+            دونوں (Both)
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* ── Ayah List ── */}
       <FlatList
         ref={flatListRef}
-        data={surah.ayahs as AyahItem[]}
+        data={(surah?.ayahs ?? []) as AyahItem[]}
         keyExtractor={item => String(item.numberInSurah)}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: showPlayer ? insets.bottom + 130 : insets.bottom + 40 }}
@@ -375,20 +471,20 @@ export default function SurahReaderScreen() {
         onScrollToIndexFailed={() => {}}
         ListHeaderComponent={
           <View style={[s.bismillah, { backgroundColor: colors.navy }]}>
-            {surah.number !== 1 && surah.number !== 9 && (
+            {surah?.number !== 1 && surah?.number !== 9 && (
               <Text style={s.bismillahText}>بِسۡمِ اللّٰهِ الرَّحۡمٰنِ الرَّحِيۡمِ</Text>
             )}
-            <Text style={[s.surahTitle, { color: colors.gold }]}>{surah.nameArabic}</Text>
-            <Text style={[s.surahSubtitle, { color: "#FFFFFF90" }]}>{surah.nameEnglish}</Text>
+            <Text style={[s.surahTitle, { color: colors.gold }]}>{surah?.nameArabic ?? meta?.nameArabic ?? ""}</Text>
+            <Text style={[s.surahSubtitle, { color: "#FFFFFF90" }]}>{surah?.nameEnglish ?? meta?.nameEnglish ?? ""}</Text>
             <View style={s.surahMeta}>
               <View style={s.surahMetaItem}>
                 <Feather name="map-pin" size={12} color="#FFFFFF70" />
-                <Text style={s.surahMetaText}>{surah.revelationType}</Text>
+                <Text style={s.surahMetaText}>{surah?.revelationType ?? meta?.revelationType ?? "Meccan"}</Text>
               </View>
               <View style={s.surahMetaDivider} />
               <View style={s.surahMetaItem}>
                 <Feather name="hash" size={12} color="#FFFFFF70" />
-                <Text style={s.surahMetaText}>{surah.totalAyahs} Ayahs</Text>
+                <Text style={s.surahMetaText}>{surah?.totalAyahs ?? meta?.totalAyahs ?? 0} Ayahs</Text>
               </View>
               <View style={s.surahMetaDivider} />
               <View style={s.surahMetaItem}>
@@ -464,18 +560,20 @@ export default function SurahReaderScreen() {
               </View>
 
               {/* Arabic text */}
-              <Text style={[s.arabic, { color: colors.foreground, fontSize: arabicFontSize, lineHeight: arabicFontSize * 1.9 }]}>
-                {item.arabic}
-              </Text>
+              {showArabic && (
+                <Text style={[s.arabic, { color: colors.foreground, fontSize: arabicFontSize, lineHeight: arabicFontSize * 1.9 }]}>
+                  {item.arabic}
+                </Text>
+              )}
 
               {/* Translations */}
-              {showTranslation && item.translationEn && (
+              {showEnglish && Boolean(item.translationEn) && (
                 <Text style={[s.translation, { color: colors.mutedForeground, fontSize: translationFontSize, lineHeight: translationFontSize * 1.6 }]}>
                   {item.translationEn}
                 </Text>
               )}
-              {showTranslation && showUrdu && item.translationUr && (
-                <Text style={[s.urdu, { color: colors.mutedForeground, fontSize: translationFontSize, lineHeight: translationFontSize * 1.8 }]}>
+              {showUrdu && Boolean(item.translationUr) && (
+                <Text style={[s.urdu, { color: colors.gold, fontSize: translationFontSize + 1, lineHeight: (translationFontSize + 1) * 1.8 }]}>
                   {item.translationUr}
                 </Text>
               )}
@@ -500,7 +598,7 @@ export default function SurahReaderScreen() {
             <View style={{ flex: 1 }}>
               <Text style={s.playerReciter} numberOfLines={1}>{selectedReciter.name.split(" ").slice(0, 2).join(" ")}</Text>
               <Text style={s.playerAyah}>
-                {currentAyahNum ? `Ayah ${currentAyahNum} / ${surah.totalAyahs}` : "Loading…"}
+                {currentAyahNum ? `Ayah ${currentAyahNum} / ${surah?.totalAyahs ?? meta?.totalAyahs ?? ""}` : "Loading…"}
               </Text>
             </View>
           </View>
@@ -514,8 +612,8 @@ export default function SurahReaderScreen() {
             <TouchableOpacity onPress={togglePlayPause} style={[s.playPauseBtn, { backgroundColor: colors.primary }]}>
               {isLoadingAudio ? <ActivityIndicator color="#FFF" size="small" /> : <Feather name={isPlaying ? "pause" : "play"} size={20} color="#FFF" />}
             </TouchableOpacity>
-            <TouchableOpacity onPress={nextAyah} style={s.controlBtn} disabled={playingAyahIndex === null || playingAyahIndex >= (surah.ayahs?.length ?? 0) - 1}>
-              <Feather name="skip-forward" size={20} color={playingAyahIndex === null || playingAyahIndex >= (surah.ayahs?.length ?? 0) - 1 ? "#FFFFFF30" : "#FFF"} />
+            <TouchableOpacity onPress={nextAyah} style={s.controlBtn} disabled={playingAyahIndex === null || playingAyahIndex >= (surah?.ayahs?.length ?? 0) - 1}>
+              <Feather name="skip-forward" size={20} color={playingAyahIndex === null || playingAyahIndex >= (surah?.ayahs?.length ?? 0) - 1 ? "#FFFFFF30" : "#FFF"} />
             </TouchableOpacity>
             <TouchableOpacity onPress={stopAudio} style={s.controlBtn}>
               <Feather name="square" size={18} color="#FFFFFF70" />
@@ -529,10 +627,10 @@ export default function SurahReaderScreen() {
         <TouchableOpacity style={s.menuOverlay} activeOpacity={1} onPress={() => setShowAyahMenu(null)}>
           <View style={[s.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[s.menuTitle, { color: colors.foreground }]}>
-              {surah.nameTransliteration} — Ayah {showAyahMenu?.numberInSurah}
+              {surah?.nameTransliteration ?? meta?.nameTransliteration} — Ayah {showAyahMenu?.numberInSurah}
             </Text>
             {[
-              { icon: "play", label: "Play this Ayah", action: () => { const idx = surah.ayahs?.findIndex(a => a.numberInSurah === showAyahMenu?.numberInSurah) ?? 0; setShowAyahMenu(null); playAyah(idx); } },
+              { icon: "play", label: "Play this Ayah", action: () => { const idx = surah?.ayahs?.findIndex((a: any) => a.numberInSurah === showAyahMenu?.numberInSurah) ?? 0; setShowAyahMenu(null); playAyah(idx); } },
               { icon: "bookmark", label: "Bookmark", action: () => { if (showAyahMenu) { setShowAyahMenu(null); handleBookmark(showAyahMenu); } } },
               { icon: "copy", label: "Copy Ayah + Translation", action: () => showAyahMenu && handleCopyAyah(showAyahMenu) },
               { icon: "share-2", label: "Share Ayah", action: () => showAyahMenu && handleShareAyah(showAyahMenu) },
@@ -585,8 +683,9 @@ export default function SurahReaderScreen() {
 
             {/* Toggles */}
             {[
-              { label: "Show Translation (English)", value: showTranslation, toggle: () => setShowTranslation(v => !v) },
-              { label: "Show Urdu Translation", value: showUrdu, toggle: () => setShowUrdu(v => !v) },
+              { label: "عربی متن (Arabic Text)", value: showArabic, toggle: () => setShowArabic(v => !v) },
+              { label: "اردو ترجمہ (Urdu Translation)", value: showUrdu, toggle: () => setShowUrdu(v => !v) },
+              { label: "English Translation", value: showEnglish, toggle: () => setShowEnglish(v => !v) },
               { label: "Show Tafsir (Ibn Kathir)", value: showTafsir, toggle: () => setShowTafsir(v => !v) },
             ].map(item => (
               <TouchableOpacity key={item.label} style={[s.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={item.toggle}>
@@ -645,6 +744,25 @@ function makeStyles(colors: any, arabicFontSize: number, translationFontSize: nu
     navBtn: { padding: 2 },
     qariBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", borderWidth: 1.5 },
 
+    viewModeBar: {
+      flexDirection: "row",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      gap: 6,
+    },
+    modeTab: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modeTabText: {
+      fontSize: 12,
+      fontFamily: "Inter_600SemiBold",
+    },
+
     bismillah: { padding: 28, alignItems: "center" },
     bismillahText: { fontSize: 20, color: "#FFF", marginBottom: 14, textAlign: "center", lineHeight: 36 },
     surahTitle: { fontSize: 34, marginBottom: 6, lineHeight: 50 },
@@ -670,23 +788,15 @@ function makeStyles(colors: any, arabicFontSize: number, translationFontSize: nu
     arabic: {
       textAlign: "right",
       marginBottom: 12,
-      fontFamily: Platform.select({
-        ios: "Geeza Pro",
-        android: "serif",
-        web: "'Traditional Arabic', 'Amiri', 'Scheherazade New', serif",
-        default: "System",
-      }),
+      fontFamily: "Amiri_400Regular",
+      lineHeight: Math.round(arabicFontSize * 2.1),
     },
-    translation: { fontFamily: "Inter_400Regular", marginBottom: 6, color: "#666" },
+    translation: { fontFamily: "Inter_400Regular", marginBottom: 6, color: colors.mutedForeground, lineHeight: Math.round(translationFontSize * 1.6) },
     urdu: {
       textAlign: "right",
-      fontFamily: Platform.select({
-        ios: "Noto Nastaliq Urdu",
-        android: "serif",
-        web: "'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif",
-        default: "System",
-      }),
-      marginBottom: 6,
+      fontFamily: "NotoNastaliqUrdu_400Regular",
+      lineHeight: Math.round(translationFontSize * 2.2),
+      marginBottom: 8,
     },
 
     tafsirBox: { borderRadius: 10, borderWidth: 1, padding: 12, marginTop: 8 },

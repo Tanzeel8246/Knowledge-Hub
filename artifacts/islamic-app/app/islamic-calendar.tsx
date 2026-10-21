@@ -250,12 +250,17 @@ export default function IslamicCalendarScreen() {
           const today_ = isToday(day);
           const evColor = dayEventColor(day);
           const hasEv = dayHasEvent(day);
+          const gDate = hijriToGregorian(hYear, hMonth, day);
+          const gDay = gDate.getDate();
           return (
             <View key={`d-${day}`} style={[s.dayCell, today_ && { backgroundColor: colors.primary, borderRadius: 12 }]}>
               <Text style={[s.dayNum, {
                 color: today_ ? "#FFF" : day % 7 === 6 ? colors.gold : colors.foreground,
                 fontFamily: today_ ? "Inter_700Bold" : "Inter_400Regular",
               }]}>{day}</Text>
+              <Text style={[s.gregSubDay, { color: today_ ? "#FFFFFFB0" : colors.mutedForeground }]}>
+                {gDay}
+              </Text>
               {hasEv && <View style={[s.eventDot, { backgroundColor: today_ ? "#FFF" : (evColor ?? colors.gold) }]} />}
             </View>
           );
@@ -266,25 +271,32 @@ export default function IslamicCalendarScreen() {
       {monthEvents.length > 0 && (
         <View style={s.section}>
           <Text style={[s.sectionTitle, { color: colors.foreground }]}>Events this month</Text>
-          {monthEvents.map((ev, i) => (
-            <View key={i} style={[s.eventCard, { backgroundColor: colors.card, borderColor: ev.color + "40", borderLeftColor: ev.color }]}>
-              <View style={s.eventCardLeft}>
-                <View style={[s.eventDateCircle, { backgroundColor: ev.color + "20" }]}>
-                  <Text style={[s.eventDateDay, { color: ev.color }]}>{ev.hijriDay}</Text>
-                  <Text style={[s.eventDateSuffix, { color: ev.color }]}>{HIJRI_MONTHS[ev.hijriMonth - 1].substring(0, 3)}</Text>
+          {monthEvents.map((ev, i) => {
+            const evGDate = hijriToGregorian(hYear, ev.hijriMonth, ev.hijriDay);
+            const evGStr = evGDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+            return (
+              <View key={i} style={[s.eventCard, { backgroundColor: colors.card, borderColor: ev.color + "40", borderLeftColor: ev.color }]}>
+                <View style={s.eventCardLeft}>
+                  <View style={[s.eventDateCircle, { backgroundColor: ev.color + "20" }]}>
+                    <Text style={[s.eventDateDay, { color: ev.color }]}>{ev.hijriDay}</Text>
+                    <Text style={[s.eventDateSuffix, { color: ev.color }]}>{HIJRI_MONTHS[ev.hijriMonth - 1].substring(0, 3)}</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={s.eventCardBody}>
-                <Text style={[s.eventName, { color: colors.foreground }]}>{ev.name}</Text>
-                <Text style={[s.eventNameAr, { color: ev.color }]}>{ev.nameAr}</Text>
-              </View>
-              {ev.importance === "high" && (
-                <View style={[s.importanceBadge, { backgroundColor: ev.color + "20" }]}>
-                  <Feather name="star" size={10} color={ev.color} />
+                <View style={s.eventCardBody}>
+                  <Text style={[s.eventName, { color: colors.foreground }]}>{ev.name}</Text>
+                  <Text style={[s.eventNameAr, { color: ev.color }]}>{ev.nameAr}</Text>
+                  <Text style={[s.eventDateMeta, { color: colors.mutedForeground }]}>
+                    {ev.hijriDay} {HIJRI_MONTHS[ev.hijriMonth - 1]} {hYear} AH  ·  {evGStr}
+                  </Text>
                 </View>
-              )}
-            </View>
-          ))}
+                {ev.importance === "high" && (
+                  <View style={[s.importanceBadge, { backgroundColor: ev.color + "20" }]}>
+                    <Feather name="star" size={10} color={ev.color} />
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -351,7 +363,9 @@ function makeStyles(colors: any) {
     eventDateSuffix: { fontSize: 9, fontFamily: "Inter_400Regular" },
     eventCardBody: { flex: 1 },
     eventName: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
-    eventNameAr: { fontSize: 13 },
+    eventNameAr: { fontSize: 13, marginBottom: 2 },
+    eventDateMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
+    gregSubDay: { fontSize: 9, fontFamily: "Inter_400Regular", marginTop: 1 },
     importanceBadge: { width: 24, height: 24, borderRadius: 8, alignItems: "center", justifyContent: "center" },
     upcomingCard: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8, gap: 12 },
     upcomingDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },

@@ -206,7 +206,7 @@ function makeStyles(colors: any) {
     surahName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
     surahSub: { fontSize: 11, fontFamily: "Inter_400Regular" },
     surahArabicName: { fontSize: 18 },
-    ayahArabic: { fontSize: 20, lineHeight: 36, textAlign: "right", marginBottom: 8, fontFamily: "Inter_400Regular" },
+    ayahArabic: { fontSize: 20, lineHeight: 42, textAlign: "right", marginBottom: 8, fontFamily: "Amiri_400Regular" },
     ayahTranslation: { fontSize: 13, lineHeight: 20, fontFamily: "Inter_400Regular", marginBottom: 8 },
     resultFooter: { flexDirection: "row", alignItems: "center", gap: 4 },
     openText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },

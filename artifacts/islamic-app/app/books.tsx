@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetBooks, useGetBookCategories } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 
-import { FALLBACK_BOOKS, Book } from "@/constants/booksData";
+import { FALLBACK_BOOKS, FALLBACK_CATEGORIES, Book } from "@/constants/booksData";
 
 export default function BooksScreen() {
   const colors = useColors();
@@ -30,7 +30,8 @@ export default function BooksScreen() {
     language: language || undefined,
     limit: 50,
   });
-  const { data: categories } = useGetBookCategories();
+  const { data: apiCategories } = useGetBookCategories();
+  const categories = (apiCategories && apiCategories.length > 0) ? apiCategories : FALLBACK_CATEGORIES;
 
   const allBooks = (apiBooksData?.books && apiBooksData.books.length > 0)
     ? apiBooksData.books
@@ -45,6 +46,7 @@ export default function BooksScreen() {
       b.title.toLowerCase().includes(q) ||
       (b.titleArabic && b.titleArabic.includes(q)) ||
       b.author.toLowerCase().includes(q) ||
+      (b.authorArabic && b.authorArabic.includes(q)) ||
       (b.description && b.description.toLowerCase().includes(q));
     return matchLang && matchCat && matchSearch;
   });
@@ -70,6 +72,13 @@ export default function BooksScreen() {
           <Text style={[s.title, { color: colors.foreground }]}>Islamic Library</Text>
           <Text style={[s.subtitle, { color: colors.gold }]}>المكتبة الإسلامية</Text>
         </View>
+        <TouchableOpacity
+          onPress={() => router.push("/research-search" as any)}
+          style={{ padding: 8, borderRadius: 10, backgroundColor: colors.gold + "20" }}
+          accessibilityLabel="Shamela Search"
+        >
+          <Feather name="search" size={20} color={colors.gold} />
+        </TouchableOpacity>
       </View>
 
       <View style={[s.searchBar, { backgroundColor: colors.card, borderColor: colors.border, marginHorizontal: 16, marginTop: 12 }]}>
@@ -106,31 +115,38 @@ export default function BooksScreen() {
       </View>
 
       {categories && categories.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.categoryScroll}>
-          <TouchableOpacity
-            onPress={() => setSelectedCategory(null)}
-            style={[s.catChip, {
-              backgroundColor: selectedCategory === null ? colors.gold + "30" : colors.card,
-              borderColor: selectedCategory === null ? colors.gold : colors.border,
-            }]}
-          >
-            <Text style={[s.catChipText, { color: selectedCategory === null ? colors.gold : colors.mutedForeground }]}>All</Text>
-          </TouchableOpacity>
-          {categories.map(cat => (
+        <View style={s.categoryContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.categoryScroll}>
             <TouchableOpacity
-              key={cat.id}
-              onPress={() => setSelectedCategory(cat.id === selectedCategory ? null : cat.id)}
+              onPress={() => setSelectedCategory(null)}
               style={[s.catChip, {
-                backgroundColor: selectedCategory === cat.id ? colors.gold + "30" : colors.card,
-                borderColor: selectedCategory === cat.id ? colors.gold : colors.border,
+                backgroundColor: selectedCategory === null ? colors.gold + "25" : colors.card,
+                borderColor: selectedCategory === null ? colors.gold : colors.border,
               }]}
             >
-              <Text style={[s.catChipText, { color: selectedCategory === cat.id ? colors.gold : colors.mutedForeground }]} numberOfLines={1}>
-                {cat.name}
+              <Text style={[s.catChipText, { color: selectedCategory === null ? colors.gold : colors.foreground }]}>
+                تمام (All)
               </Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+            {categories.map(cat => {
+              const isSelected = selectedCategory === cat.id;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  onPress={() => setSelectedCategory(isSelected ? null : cat.id)}
+                  style={[s.catChip, {
+                    backgroundColor: isSelected ? colors.primary + "20" : colors.card,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  }]}
+                >
+                  <Text style={[s.catChipText, { color: isSelected ? colors.primary : colors.foreground }]} numberOfLines={1}>
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
       )}
 
       {isLoading ? (
@@ -152,7 +168,7 @@ export default function BooksScreen() {
                   <View style={[s.langBadge, { backgroundColor: colors.primary + "20" }]}>
                     <Text style={[s.langBadgeText, { color: colors.primary }]}>{item.language.toUpperCase()}</Text>
                   </View>
-                  {item.isPublic === false && (
+                  {(item as any).isPublic === false && (
                     <View style={[s.langBadge, { backgroundColor: colors.muted }]}>
                       <Text style={[s.langBadgeText, { color: colors.mutedForeground }]}>Private</Text>
                     </View>
@@ -202,9 +218,17 @@ function makeStyles(colors: any) {
     langRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 8 },
     langChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
     langChipText: { fontSize: 12, fontFamily: "Inter_500Medium" },
-    categoryScroll: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
-    catChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, maxWidth: 160 },
-    catChipText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+    categoryContainer: { height: 44, marginBottom: 10 },
+    categoryScroll: { paddingHorizontal: 16, alignItems: "center", gap: 8 },
+    catChip: {
+      height: 34,
+      paddingHorizontal: 14,
+      borderRadius: 17,
+      borderWidth: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    catChipText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
     bookCard: { flexDirection: "row", alignItems: "center", borderRadius: 14, borderWidth: 1, marginBottom: 10, overflow: "hidden" },
     accent: { width: 4, alignSelf: "stretch" },
     bookInfo: { flex: 1, padding: 14 },

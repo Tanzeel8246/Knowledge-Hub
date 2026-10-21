@@ -5,6 +5,14 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
+import {
+  Amiri_400Regular,
+  Amiri_700Bold,
+} from "@expo-google-fonts/amiri";
+import {
+  NotoNastaliqUrdu_400Regular,
+  NotoNastaliqUrdu_700Bold,
+} from "@expo-google-fonts/noto-nastaliq-urdu";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -16,6 +24,7 @@ import { setBaseUrl } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import { useBackgroundSync } from "@/hooks/useBackgroundSync";
 import { useAutoPreload } from "@/hooks/useAutoPreload";
 
@@ -83,6 +92,7 @@ function RootLayoutNav() {
       <Stack.Screen name="kids-corner" options={{ headerShown: false }} />
       <Stack.Screen name="inheritance-calculator" options={{ headerShown: false }} />
       <Stack.Screen name="research-suite" options={{ headerShown: false }} />
+      <Stack.Screen name="research-search" options={{ headerShown: false }} />
       <Stack.Screen name="spiritual-suite" options={{ headerShown: false }} />
       <Stack.Screen name="downloads" options={{ headerShown: false }} />
       <Stack.Screen name="fatawa-archive" options={{ headerShown: false }} />
@@ -96,6 +106,10 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    Amiri_400Regular,
+    Amiri_700Bold,
+    NotoNastaliqUrdu_400Regular,
+    NotoNastaliqUrdu_700Bold,
   });
 
   useEffect(() => {
@@ -111,10 +125,12 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-                <BackgroundSyncMounter />
-                <RootLayoutNav />
-            </GestureHandlerRootView>
+            <LanguageProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                  <BackgroundSyncMounter />
+                  <RootLayoutNav />
+              </GestureHandlerRootView>
+            </LanguageProvider>
           </AuthProvider>
         </QueryClientProvider>
       </ErrorBoundary>

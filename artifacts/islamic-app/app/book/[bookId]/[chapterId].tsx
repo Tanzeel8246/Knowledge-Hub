@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,9 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Share,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +19,8 @@ import { useColors } from "@/hooks/useColors";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOfflineDownload } from "@/hooks/useOfflineDownload";
 import { FALLBACK_BOOKS } from "@/constants/booksData";
+import { fetchSurahTafsir } from "@/lib/openIslamicApi";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function ChapterReaderScreen() {
   const colors = useColors();
@@ -24,6 +28,7 @@ export default function ChapterReaderScreen() {
   const { bookId, chapterId } = useLocalSearchParams<{ bookId: string; chapterId: string }>();
   const { data: apiChapter, isLoading: apiLoading } = useGetBookChapter(bookId, chapterId);
   const [offlineChapter, setOfflineChapter] = useState<any>(null);
+  const [liveChapter, setLiveChapter] = useState<any>(null);
   const { getBookOffline } = useOfflineDownload();
   const createBookmark = useCreateBookmark();
   const queryClient = useQueryClient();
@@ -33,19 +38,42 @@ export default function ChapterReaderScreen() {
   const fallbackChapter = fallbackBook?.chapters.find(c => c.id === chapterId);
 
   useEffect(() => {
+    let isMounted = true;
     if (bookId && chapterId) {
       getBookOffline<{ book: any; chapters: any[] }>(bookId).then(data => {
+        if (!isMounted) return;
         if (data?.chapters) {
           const found = data.chapters.find((c: any) => c.id === chapterId);
-          if (found) setOfflineChapter(found);
+          if (found) {
+            setOfflineChapter(found);
+            return;
+          }
+        }
+
+        // Check if Tafsir can be fetched live
+        if (bookId === "tafsir-al-jalalayn" && fallbackChapter?.chapterNumber) {
+          fetchSurahTafsir(fallbackChapter.chapterNumber, "ar.jalalayn").then(tafsirData => {
+            if (!isMounted) return;
+            if (tafsirData && tafsirData.ayahs.length > 0) {
+              const formatted = tafsirData.ayahs
+                .map(a => `**آية ${a.number}:** ${a.text}\n\n**تفسير الجلالين:**\n${a.tafsir}`)
+                .join("\n\n---\n\n");
+              setLiveChapter({
+                ...fallbackChapter,
+                content: formatted,
+              });
+            }
+          });
         }
       });
     }
+    return () => { isMounted = false; };
   }, [bookId, chapterId]);
 
-  const chapter = offlineChapter ?? apiChapter ?? fallbackChapter;
+  const chapter = offlineChapter ?? liveChapter ?? fallbackChapter ?? apiChapter;
   const isLoading = !chapter && (!offlineChapter && apiLoading);
   const s = makeStyles(colors);
+  const { t } = useLanguage();
 
   const handleBookmark = async () => {
     try {
@@ -53,10 +81,25 @@ export default function ChapterReaderScreen() {
         data: { sourceType: "book", sourceId: chapterId, label: chapter?.title ?? "Book Chapter" },
       });
       queryClient.invalidateQueries({ queryKey: ["/bookmarks"] });
-      Alert.alert("Bookmarked", "Chapter saved to your workspace");
+      Alert.alert("✅ " + t.bookmarked, chapter?.title ?? "Chapter saved");
     } catch {
       Alert.alert("Error", "Could not bookmark this chapter");
     }
+  };
+
+  const handleCopyChapter = async () => {
+    if (!chapter) return;
+    const cleanContent = chapter.content?.replace(/\*\*/g, "") ?? "";
+    const text = `【${fallbackBook?.title ?? bookId}】\n${chapter.title}\n${chapter.titleArabic ? chapter.titleArabic + "\n" : ""}\n${cleanContent}\n\n(منقول از: المفتاح - Al-Miftah)`;
+    await Clipboard.setStringAsync(text);
+    Alert.alert("📋 " + t.copy, t.copied);
+  };
+
+  const handleShareChapter = async () => {
+    if (!chapter) return;
+    const cleanContent = chapter.content?.replace(/\*\*/g, "") ?? "";
+    const text = `【${fallbackBook?.title ?? bookId}】\n${chapter.title}\n\n${cleanContent.slice(0, 3000)}\n\n— المفتاح (Al-Miftah)`;
+    await Share.share({ message: text });
   };
 
   if (isLoading) {
@@ -75,20 +118,42 @@ export default function ChapterReaderScreen() {
     );
   }
 
-  // Render content with bold headings (lines starting with **)
+  // Render content with rich markdown support, clean bold tags, and quotes
   const renderContent = (text: string) => {
     return text.split("\n").map((line, i) => {
-      if (line.startsWith("**") && line.endsWith("**")) {
-        return (
-          <Text key={i} style={[s.contentHeading, { color: colors.foreground, fontSize: fontSize + 1 }]}>
-            {line.replace(/\*\*/g, "")}
-          </Text>
-        );
-      }
       if (line.trim() === "") return <View key={i} style={{ height: 8 }} />;
+
+      const isHeading = line.startsWith("**") && (line.endsWith("**") || line.includes(":**"));
+      const isArabicQuote = (line.includes("«") && line.includes("»")) || line.startsWith("﴿");
+
+      const parts = line.split(/(\*\*.*?\*\*)/g);
+
       return (
-        <Text key={i} style={[s.contentPara, { color: colors.foreground, fontSize }]}>
-          {line}
+        <Text
+          key={i}
+          style={[
+            s.contentPara,
+            {
+              color: isArabicQuote ? colors.gold : colors.foreground,
+              fontSize: isHeading ? fontSize + 1.5 : fontSize,
+              lineHeight: isHeading ? (fontSize + 1.5) * 1.6 : fontSize * 1.75,
+              fontFamily: isHeading ? "Inter_700Bold" : "Inter_400Regular",
+              marginTop: isHeading ? 12 : 2,
+              marginBottom: isHeading ? 4 : 2,
+              textAlign: isArabicQuote ? "right" : "left",
+            },
+          ]}
+        >
+          {parts.map((part, pIdx) => {
+            if (part.startsWith("**") && part.endsWith("**")) {
+              return (
+                <Text key={pIdx} style={{ fontFamily: "Inter_700Bold", color: isHeading ? colors.primary : colors.foreground }}>
+                  {part.slice(2, -2)}
+                </Text>
+              );
+            }
+            return <Text key={pIdx}>{part}</Text>;
+          })}
         </Text>
       );
     });
@@ -106,6 +171,14 @@ export default function ChapterReaderScreen() {
           <Text style={[s.headerTitle, { color: colors.foreground }]} numberOfLines={1}>{chapter.title}</Text>
         </View>
         <View style={s.headerActions}>
+          {/* Copy */}
+          <TouchableOpacity onPress={handleCopyChapter} style={s.fontBtn}>
+            <Feather name="copy" size={18} color={colors.mutedForeground} />
+          </TouchableOpacity>
+          {/* Share */}
+          <TouchableOpacity onPress={handleShareChapter} style={s.fontBtn}>
+            <Feather name="share-2" size={18} color={colors.mutedForeground} />
+          </TouchableOpacity>
           {/* Font size controls */}
           <TouchableOpacity onPress={() => setFontSize(f => Math.max(12, f - 1))} style={s.fontBtn}>
             <Text style={[s.fontBtnText, { color: colors.mutedForeground }]}>A-</Text>
@@ -128,6 +201,24 @@ export default function ChapterReaderScreen() {
           <Text style={[s.chapterArabic, { color: colors.gold }]}>{chapter.titleArabic}</Text>
         )}
 
+        {/* Quick action pill row */}
+        <View style={{ flexDirection: "row", gap: 10, marginVertical: 12 }}>
+          <TouchableOpacity
+            style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primary + "15", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
+            onPress={handleCopyChapter}
+          >
+            <Feather name="copy" size={14} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.primary }}>{t.copy}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primary + "15", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
+            onPress={handleShareChapter}
+          >
+            <Feather name="share-2" size={14} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.primary }}>{t.share}</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={[s.divider, { backgroundColor: colors.border }]} />
 
         <View style={s.contentBody}>
@@ -136,6 +227,27 @@ export default function ChapterReaderScreen() {
               No content available for this chapter yet.
             </Text>
           )}
+        </View>
+
+        {/* Bottom share card */}
+        <View style={{ marginTop: 32, padding: 16, borderRadius: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", gap: 10 }}>
+          <Text style={{ fontSize: 13, color: colors.mutedForeground }}>{t.appName} — {fallbackBook?.title ?? "Islamic Library"}</Text>
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <TouchableOpacity
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}
+              onPress={handleCopyChapter}
+            >
+              <Feather name="copy" size={14} color="#FFF" />
+              <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFF" }}>{t.copy}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}
+              onPress={handleShareChapter}
+            >
+              <Feather name="share-2" size={14} color={colors.foreground} />
+              <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>{t.share}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -154,7 +266,7 @@ function makeStyles(colors: any) {
     fontBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
     content: { paddingHorizontal: 22, paddingTop: 24 },
     chapterTitle: { fontSize: 24, fontFamily: "Inter_700Bold", lineHeight: 34, marginBottom: 6 },
-    chapterArabic: { fontSize: 20, marginBottom: 16, textAlign: "right" },
+    chapterArabic: { fontSize: 22, marginBottom: 16, textAlign: "right", fontFamily: "Amiri_700Bold", lineHeight: 42 },
     divider: { height: 1, marginBottom: 24, marginTop: 8 },
     contentBody: { gap: 2 },
     contentHeading: { fontFamily: "Inter_700Bold", lineHeight: 28, marginTop: 16, marginBottom: 6 },
